@@ -147,6 +147,15 @@ def test_fetch_range_caches_per_year_and_load_covers_nem_days(tmp_path: Path) ->
     assert df["valid_time"].is_monotonic_increasing
 
 
+def test_load_rejects_stale_partial_cache(tmp_path: Path) -> None:
+    session = FakeSession()
+    kw = {"latitude": -37.8136, "longitude": 144.9631, "raw_dir": tmp_path}
+    fetch_range(date(2024, 1, 1), date(2024, 1, 31), session=session, **kw)  # type: ignore[arg-type]
+    # The 2024 file only runs to 1 Feb; asking for March must fail loudly, not return a gap.
+    with pytest.raises(WeatherQualityError, match="--force"):
+        load_weather(date(2024, 1, 1), date(2024, 3, 31), **kw)
+
+
 def test_rate_limit_is_raised_not_retried(tmp_path: Path) -> None:
     session = FakeSession({"error": True, "reason": "Daily API request limit exceeded."})
     with pytest.raises(OpenMeteoError):

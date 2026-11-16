@@ -278,4 +278,12 @@ def load_weather(
     df = df[(df["valid_time"] >= lo) & (df["valid_time"] <= hi)]
     if df["valid_time"].duplicated().any():
         raise WeatherQualityError("duplicated timestamps across cached years")
+    expected = pd.date_range(lo, hi, freq=HOUR)
+    n_missing = len(expected.difference(pd.DatetimeIndex(df["valid_time"])))
+    if n_missing:
+        # Usually a cached partial year from an earlier, shorter date range.
+        raise WeatherQualityError(
+            f"cached weather is missing {n_missing} hours between {lo} and {hi}; "
+            "re-run `nemspike fetch-weather --force`"
+        )
     return df.sort_values("valid_time", ignore_index=True)[["valid_time", *variables]]
