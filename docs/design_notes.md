@@ -526,8 +526,36 @@ Talking points:
   arbitrage alone, not a forecast of real earnings. Adding a throughput (degradation) cost per MWh
   is a natural refinement, to agree before Step 9 because it changes every strategy.
 
-**Assumptions and limitations.** Price taker (no market impact), energy only (no FCAS), no
-degradation cost (so it may cycle on thin spreads), constant efficiency, no auxiliary load, no
+**Degradation cost (added after the first results).** With no wear cost, perfect foresight cycled
+4.9 times a day, trading every 5-minute wiggle that covered the 10 % round-trip loss. A linear wear
+cost of k $/MWh discharged is now in the objective (LP and dynamic programme): a trade must cover
+losses *and* the battery life it uses. Real wear costs depend on cell chemistry, warranty terms
+and replacement prices, so instead of claiming one "true" value, $10/MWh is used as an
+illustrative central case with $0 and $20 as sensitivities (`nemspike battery
+--degradation-costs 0,10,20`). Capture is measured on **net** revenue (market revenue minus wear).
+
+| Wear cost | Strategy | Market revenue | Wear cost | Net revenue | Net $/MW-year | Capture | Loss-making days | Cycles/day |
+|---|---|---|---|---|---|---|---|---|
+| $0 | Perfect foresight | $52.69 m | – | $52.69 m | $210,888 | 100 % | 0 % | 4.87 |
+| $0 | Naive time-of-day | $22.04 m | – | $22.04 m | $88,224 | 41.8 % | 7.0 % | 3.37 |
+| $10 | Perfect foresight | $51.66 m | $4.67 m | $46.99 m | $188,047 | 100 % | 0 % | 3.20 |
+| $10 | Naive time-of-day | $22.29 m | $3.54 m | $18.75 m | $75,037 | 39.9 % | 14.7 % | 2.42 |
+| $20 | Perfect foresight | $50.12 m | $7.19 m | $42.93 m | $171,795 | 100 % | 0 % | 2.46 |
+| $20 | Naive time-of-day | $21.50 m | $5.23 m | $16.28 m | $65,153 | 37.9 % | 21.3 % | 1.79 |
+
+The $0 row reproduces the earlier run exactly. Observations:
+- Wear cost cuts cycling sharply (4.9 → 3.2 → 2.5 per day for perfect foresight) but net revenue
+  much less (−11 % at $10): the trades it removes were thin.
+- The naive schedule's *market* revenue slightly rises at $10, because it stops making marginal
+  trades that often lost money once realised prices differed from the average day.
+- Revenue concentration at $10: the 5 best days earn 25.8 % of perfect-foresight net revenue and
+  the best 10 % of days 42.8 % (median day $34,088; 99th percentile $247,835).
+- Even at $20, perfect foresight cycles about 2.5 times a day, still high: with perfect
+  knowledge of 5-minute prices there are many profitable intraday spreads. Forecast-driven
+  strategies will cycle less, because uncertain spreads are not worth trading.
+
+**Assumptions and limitations.** Price taker (no market impact), energy only (no FCAS), a
+linear wear cost (real degradation depends on depth of cycle, temperature and age), constant efficiency, no auxiliary load, no
 ramp limits, no network constraints or marginal loss factors, settlement at the 5-minute RRP.
 
 ---
