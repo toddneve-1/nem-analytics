@@ -68,7 +68,7 @@ are separate markets and arrangements. This project models energy arbitrage only
 | Horizons | 30 min, 4 h | Plus a 30-minute grid to 4 h for dispatch |
 | Quantiles | 0.1, 0.5, 0.9, 0.99 | |
 | Spike | > $300/MWh (fixed) | Percentile option, fitted on training fold only |
-| Battery | 100 MW / 200 MWh, 90 % round trip, SoC 10–90 % | No degradation cost in v1 |
+| Battery | 100 MW / 200 MWh, 90 % round trip, SoC 10–90 % | Wear cost $10/MWh discharged added in Step 8 ($0 and $20 as sensitivities) |
 | Seed | 42 | |
 
 ---
@@ -498,8 +498,9 @@ kept as an upper bound.
   particular slots, and the schedule then "chases" spikes that do not recur.
 - Forecast-driven rolling-horizon dispatch: Step 9.
 
-**Results** (`nemspike battery`; 912 NEM days, 1 Jan 2024 – 30 Jun 2026, development folds only;
-100 MW / 200 MWh, 90 % round trip, 10–90 % state of charge).
+**First results, no wear cost** (`nemspike battery --degradation-costs 0`; 912 NEM days,
+1 Jan 2024 – 30 Jun 2026, development folds only; 100 MW / 200 MWh, 90 % round trip, 10–90 % state
+of charge). The wear-cost results that supersede these as the headline are further below.
 
 | Strategy | Revenue | Per day | $/MW-year | Capture vs perfect | Loss-making days | Cycles per day |
 |---|---|---|---|---|---|---|
@@ -508,9 +509,10 @@ kept as an upper bound.
 
 (Cycles = energy discharged ÷ 160 MWh usable capacity.)
 
-Checks on the saved dispatch, all 912 days: state of charge within 20–180 MWh, power ≤ 100 MW,
-no simultaneous charge and discharge, every day ends at 100 MWh, energy balance exact to 1e-13 MWh,
-and the naive strategy never beats perfect foresight on any day.
+Checks on the saved dispatch, all 912 days, repeated for wear costs of $0, $10 and $20: state of
+charge within 20–180 MWh, power ≤ 100 MW, no simultaneous charge and discharge, every day ends at
+100 MWh, energy balance exact to 1e-13 MWh, and the naive strategy never beats perfect foresight
+(on net revenue) on any day.
 
 Talking points:
 - **Revenue is concentrated in spikes.** The 5 best days earn 23 % of all perfect-foresight
@@ -523,8 +525,7 @@ Talking points:
 - **Perfect foresight cycles 4.9 times a day**, far above a typical real battery (often around
   1–2). With no degradation cost, the optimiser trades every 5-minute wiggle that covers the 10 %
   round-trip loss. The $/MW-year figure is therefore an optimistic upper bound for energy
-  arbitrage alone, not a forecast of real earnings. Adding a throughput (degradation) cost per MWh
-  is a natural refinement, to agree before Step 9 because it changes every strategy.
+  arbitrage alone, not a forecast of real earnings. This led to adding a degradation cost (next).
 
 **Degradation cost (added after the first results).** With no wear cost, perfect foresight cycled
 4.9 times a day, trading every 5-minute wiggle that covered the 10 % round-trip loss. A linear wear
@@ -581,6 +582,18 @@ ramp limits, no network constraints or marginal loss factors, settlement at the 
 
 - Energy arbitrage only: no FCAS co-optimisation.
 - Price taker: no market impact from the battery's own dispatch.
-- Simplified battery: constant efficiency, no degradation, no auxiliary load, no ramp limits.
+- Simplified battery: constant efficiency, linear wear cost only (real degradation depends on depth
+  of cycle, temperature and age), no auxiliary load, no ramp limits.
+- Battery resets to 50 % state of charge every midnight, so energy is never carried between days.
 - No network constraints, marginal loss factors or intra-regional congestion.
 - Weather from a single Melbourne point, not a demand- or generation-weighted average.
+- Weather is ERA5 reanalysis (published about 5 days late, 25 km grid) standing in for real-time
+  observations; no weather *forecasts* are used yet, which limits the 4-hour horizon.
+- No AEMO pre-dispatch forecasts as a benchmark or feature yet (a planned extension).
+- One region (VIC1) and no interconnector or neighbouring-region information.
+- LightGBM hyperparameters are fixed, not tuned; the spike classifier sometimes uses close to the
+  2,000-tree cap.
+- 4-hour prediction intervals are too narrow (73 % coverage for a nominal 80 %), most in volatile
+  quarters.
+- Perfect foresight optimises each day in isolation with knowledge of all 288 prices, an upper
+  bound no real strategy can reach.

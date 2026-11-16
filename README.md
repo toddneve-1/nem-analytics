@@ -131,7 +131,7 @@ uv run nemspike backtest --models baselines,lgbm_asinh,lgbm_none
 ```
 
 ```bash
-uv run nemspike battery
+uv run nemspike battery --degradation-costs 0,10,20
 ```
 
 ```bash
