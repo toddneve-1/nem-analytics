@@ -15,8 +15,9 @@ from pydantic import BaseModel, Field, field_validator, model_validator
 
 
 class WeatherConfig(BaseModel):
-    latitude: float
-    longitude: float
+    latitude: float = Field(ge=-90, le=90)
+    longitude: float = Field(ge=-180, le=180)
+    model: str = "era5"
     availability_lag_hours: int = Field(ge=0)
 
 

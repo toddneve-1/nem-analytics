@@ -11,6 +11,8 @@ data:
     # Melbourne CBD (Olympic Park area). Single point; regional coverage is a known limitation.
     latitude: -37.8136
     longitude: 144.9631
+    # Open-Meteo model. ERA5 is used alone (not "best match") so the series is consistent over time.
+    model: era5
     # Assumed delay (hours) between a weather value's valid time and when it is usable at a
     # forecast origin. Prevents using weather that would not yet have been observed/published.
     availability_lag_hours: 1

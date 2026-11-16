@@ -48,5 +48,20 @@ def fetch_prices(config: Path = ConfigOpt, force: bool = False) -> None:
         typer.echo(f"first missing interval ends: {report.missing_interval_ends[:5]}")
 
 
+@app.command("fetch-weather")
+def fetch_weather(config: Path = ConfigOpt, force: bool = False) -> None:
+    """Download and cache hourly Open-Meteo weather, then print a quality report."""
+    from nemspike.data import weather
+
+    cfg = load_config(config)
+    d, w = cfg.data, cfg.data.weather
+    paths = weather.fetch_range(
+        d.start, d.end, w.latitude, w.longitude, d.raw_dir, model=w.model, force=force
+    )
+    typer.echo(f"{len(paths)} yearly files cached under {paths[0].parent}")
+    df = weather.load_weather(d.start, d.end, w.latitude, w.longitude, d.raw_dir, model=w.model)
+    typer.echo(weather.quality_report(df, list(weather.VARIABLES)).summary())
+
+
 if __name__ == "__main__":
     app()
