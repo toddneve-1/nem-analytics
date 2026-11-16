@@ -49,6 +49,22 @@ validation:
   # Final holdout: never used for development or tuning; scored once with `--stage holdout`.
   holdout_start: "2026-07-01"
 
+model:
+  # Train on every 3rd origin: neighbouring 5-minute rows are nearly duplicates. Test on all.
+  train_stride_minutes: 15
+  # Early stopping on the last N days of each training fold (with an embargo), then refit on
+  # the whole training fold with the chosen number of trees. The test fold is never used.
+  validation_days: 60
+  learning_rate: 0.05
+  num_leaves: 31
+  min_data_in_leaf: 200
+  feature_fraction: 0.8
+  bagging_fraction: 0.8
+  bagging_freq: 1
+  lambda_l2: 1.0
+  max_rounds: 2000
+  early_stopping_rounds: 100
+
 battery:
   power_mw: 100.0
   energy_mwh: 200.0

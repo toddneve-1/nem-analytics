@@ -98,6 +98,29 @@ class ValidationConfig(BaseModel):
     holdout_start: date | None = None
 
 
+class ModelConfig(BaseModel):
+    """LightGBM settings shared by the quantile models and the spike classifier."""
+
+    train_stride_minutes: int = Field(ge=5)
+    validation_days: int = Field(ge=7)
+    learning_rate: float = Field(gt=0, le=1)
+    num_leaves: int = Field(ge=2)
+    min_data_in_leaf: int = Field(ge=1)
+    feature_fraction: float = Field(gt=0, le=1)
+    bagging_fraction: float = Field(gt=0, le=1)
+    bagging_freq: int = Field(ge=0)
+    lambda_l2: float = Field(ge=0)
+    max_rounds: int = Field(ge=1)
+    early_stopping_rounds: int = Field(ge=1)
+
+    @field_validator("train_stride_minutes")
+    @classmethod
+    def _stride_multiple(cls, v: int) -> int:
+        if v % 5:
+            raise ValueError("train_stride_minutes must be a multiple of 5")
+        return v
+
+
 class BatteryConfig(BaseModel):
     power_mw: float = Field(gt=0)
     energy_mwh: float = Field(gt=0)
@@ -127,6 +150,7 @@ class Config(BaseModel):
     features: FeaturesConfig
     spike: SpikeConfig
     validation: ValidationConfig
+    model: ModelConfig
     battery: BatteryConfig
     tracking: TrackingConfig
 

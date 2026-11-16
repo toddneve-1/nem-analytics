@@ -63,37 +63,67 @@ def fetch_weather(config: Path = ConfigOpt, force: bool = False) -> None:
     typer.echo(weather.quality_report(df, list(weather.VARIABLES)).summary())
 
 
-@app.command("backtest-baselines")
-def backtest_baselines(config: Path = ConfigOpt) -> None:
-    """Walk-forward backtest of the baselines for each configured horizon."""
+SUMMARY_COLUMNS = [
+    "mae",
+    "rmse",
+    "pinball_mean",
+    "pinball_q0.99",
+    "coverage_q0.1_q0.9",
+    "share_below_q0.99",
+    "spike_pr_auc",
+    "spike_precision",
+    "spike_recall",
+    "spike_brier",
+]
+
+
+@app.command()
+def backtest(
+    config: Path = ConfigOpt,
+    models: str = typer.Option("baselines", help="Comma-separated model names or 'baselines'"),
+    stage: str = typer.Option("dev", help="'dev' (development folds) or 'holdout' (final test)"),
+    horizons: str = typer.Option("", help="Comma-separated horizons in minutes (default: config)"),
+) -> None:
+    """Walk-forward backtest. Saves predictions per model, then a summary of all saved models."""
     import pandas as pd
 
     from nemspike.evaluation.backtest import run_backtest, summarise
     from nemspike.features.build import build_features
-    from nemspike.models.baselines import default_baselines
+    from nemspike.models.registry import expand, make_model
     from nemspike.pipeline import ARTEFACT_DIR, REPORT_DIR, load_inputs
 
+    if stage not in ("dev", "holdout"):
+        raise typer.BadParameter("stage must be 'dev' or 'holdout'")
+    if stage == "holdout":
+        typer.echo("Scoring the FINAL HOLDOUT. Do not tune anything on these results.")
     cfg = load_config(config)
+    names = expand([m.strip() for m in models.split(",") if m.strip()])
+    hs = [int(h) for h in horizons.split(",")] if horizons else cfg.forecast.horizons_minutes
     prices, weather = load_inputs(cfg)
-    (ARTEFACT_DIR / "backtest").mkdir(parents=True, exist_ok=True)
-    (REPORT_DIR / "metrics").mkdir(parents=True, exist_ok=True)
-    cols = ["mae", "rmse", "pinball_mean", "coverage_q0.1_q0.9", "share_below_q0.99"]
-    cols += ["spike_pr_auc", "spike_precision", "spike_recall"]
-    for h in cfg.forecast.horizons_minutes:
+
+    for h in hs:
+        pred_dir = ARTEFACT_DIR / "backtest" / stage / f"h{h}"
+        metric_dir = REPORT_DIR / "metrics" / stage
+        pred_dir.mkdir(parents=True, exist_ok=True)
+        metric_dir.mkdir(parents=True, exist_ok=True)
         df = build_features(prices, weather, h, cfg)
-        preds = run_backtest(df, lambda: default_baselines(cfg.forecast.quantiles), cfg)
-        preds.to_parquet(ARTEFACT_DIR / "backtest" / f"baselines_h{h}.parquet", index=False)
-        summary = summarise(preds, cfg)
-        summary.to_csv(REPORT_DIR / "metrics" / f"baselines_h{h}.csv")
-        summarise(preds, cfg, by_fold=True).to_csv(
-            REPORT_DIR / "metrics" / f"baselines_h{h}_by_fold.csv"
-        )
+        for name in names:
+            typer.echo(f"h={h} min: running {name}")
+            preds = run_backtest(df, lambda name=name: [make_model(name, cfg)], cfg, stage)
+            preds.to_parquet(pred_dir / f"{name}.parquet", index=False)
+
+        # Summarise every model saved for this stage and horizon, so slow and fast models can be
+        # run separately but compared on the same rows.
+        all_preds = pd.concat([pd.read_parquet(p) for p in sorted(pred_dir.glob("*.parquet"))])
+        summary = summarise(all_preds, cfg)
+        summary.to_csv(metric_dir / f"h{h}_summary.csv")
+        summarise(all_preds, cfg, by_fold=True).to_csv(metric_dir / f"h{h}_by_fold.csv")
         typer.echo(
-            f"\nHorizon {h} min: {int(summary['n'].iloc[0]):,} test origins, "
-            f"{preds['fold'].nunique()} folds"
+            f"\n[{stage}] horizon {h} min: {int(summary['n'].iloc[0]):,} test origins, "
+            f"{all_preds['fold'].nunique()} fold(s)"
         )
-        with pd.option_context("display.width", 200, "display.precision", 3):
-            typer.echo(summary[cols].to_string())
+        with pd.option_context("display.width", 250, "display.precision", 3):
+            typer.echo(summary[[c for c in SUMMARY_COLUMNS if c in summary]].to_string())
 
 
 if __name__ == "__main__":
