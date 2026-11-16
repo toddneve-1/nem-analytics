@@ -6,6 +6,41 @@ Each entry is written to be explainable in an interview: *what* was decided, *wh
 
 ---
 
+## 0. Market background
+
+**What "demand" is in this data.** `TOTALDEMAND` is the regional demand AEMO used in each 5-minute
+dispatch run: the load that scheduled and semi-scheduled generation plus net imports were dispatched
+to meet. It is an operational estimate based on real-time measurements, not metered (settlement)
+consumption.
+- Rooftop solar is behind the meter, so it appears as *lower demand*, not as generation. Sunny
+  middays therefore show very low grid demand (down to about 1,200 MW in VIC1).
+- Demand is power (MW). Energy in one interval is MW × 5/60 MWh, and value is RRP × MWh.
+- Demand for an interval is only known once it is dispatched, so a forecast may use demand up to
+  the last completed interval only.
+
+**How the price is set.** Every 5 minutes generators offer quantities at prices. AEMO dispatches the
+cheapest offers that meet demand, within network limits, and the marginal offer sets the regional
+reference price (RRP) paid to all generators and charged to all consumers in the region.
+
+**Why prices go negative.** It is a market outcome, not a stabilisation payment. When enough
+capacity is offered below $0 to meet demand on its own, the clearing price is negative.
+Generators offer below zero because:
+- renewables earn Large-scale Generation Certificates (LGCs) and often have fixed-price power
+  purchase agreements, so they still profit at a modestly negative spot price;
+- inflexible thermal plant can find it cheaper to run through a few hours than to shut down and
+  restart;
+- rooftop solar lowers midday grid demand, so fewer offers are needed and cheap or negative offers
+  become marginal.
+
+At a negative price, generators pay to generate and consumers, including a charging battery, are
+paid to consume. The market floor is −$1,000/MWh. Price spikes are the opposite case: tight supply
+or low wind and solar push dispatch up the offer stack, at times to the market price cap.
+
+**What is out of scope.** Frequency control ancillary services (FCAS), system strength and inertia
+are separate markets and arrangements. This project models energy arbitrage only.
+
+---
+
 ## 1. Project scaffold
 
 **Decision.** `src/` layout package (`nemspike`), configured by `pyproject.toml`, managed with
