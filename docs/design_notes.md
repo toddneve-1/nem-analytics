@@ -342,11 +342,14 @@ LightGBM can still differ slightly across machines or thread counts.
 | 30 min | persistence (best baseline) | **24.90** | **234.90** | **8.45** | **4.20** | 0.822 | 0.357 | 0.61 / 0.41 |
 | 30 min | lgbm_asinh | 25.47 | 311.07 | 8.55 | 4.92 | 0.787 | **0.594** | 0.73 / 0.45 |
 | 30 min | lgbm_none | 25.51 | 311.22 | 8.88 | 5.69 | 0.795 | 0.594 | 0.73 / 0.45 |
-| 4 h | best baseline (MAE: same time yesterday; pinball: climatology) | 65.48 | 326.32 | 19.86 | 10.16 | 0.793 | 0.057 | – |
+| 4 h | best baseline *per column*¹ | 65.48 | 326.32 | 19.86 | 10.16 | 0.793 | 0.057 | – |
 | 4 h | lgbm_asinh | **41.17** | **315.99** | **13.57** | **9.40** | 0.733 | **0.269** | 0.51 / 0.06 |
 | 4 h | lgbm_none | 41.17 | 315.88 | 13.74 | 9.70 | 0.730 | 0.269 | 0.51 / 0.06 |
 
-(Spike base rate 0.91 %. MAE, RMSE and pinball in $/MWh.)
+(Spike base rate 0.91 %. MAE, RMSE and pinball in $/MWh.) ¹ Each 4 h baseline figure is the best of
+the four baselines on that metric: MAE same time yesterday; RMSE, mean pinball and coverage
+climatology; q0.99 pinball persistence; PR-AUC same time yesterday. No single baseline achieves
+all of them.
 
 Per fold (`reports/metrics/dev/h*_by_fold.csv`):
 - **4 h:** LightGBM beats the best baseline on MAE and on mean pinball in **10 of 10** quarters.
