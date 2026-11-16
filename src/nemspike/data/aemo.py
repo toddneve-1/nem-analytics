@@ -116,7 +116,8 @@ def parse_price_demand_csv(source: str | bytes | Path) -> pd.DataFrame:
 def check_month_bounds(df: pd.DataFrame, year: int, month: int) -> None:
     """Raise if any row falls outside the month's interval-ending window."""
     lo = nem_day_start_utc(date(year, month, 1))
-    hi = nem_day_start_utc((pd.Timestamp(year=year, month=month, day=1) + pd.offsets.MonthBegin()).date())
+    next_month = pd.Timestamp(year=year, month=month, day=1) + pd.offsets.MonthBegin()
+    hi = nem_day_start_utc(next_month.date())
     outside = (df["interval_end"] <= lo) | (df["interval_end"] > hi)
     if outside.any():
         raise DataQualityError(f"{int(outside.sum())} rows outside {year}-{month:02d}")
