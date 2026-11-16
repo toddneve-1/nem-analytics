@@ -58,7 +58,7 @@ def monthly_bar(series: pd.Series, title: str, ylabel: str, path: Path) -> Path:
 
 
 def price_histogram(
-    rrp: pd.Series, path: Path, lo: float = -200, hi: float = 400, width: float = 20
+    rrp: pd.Series, path: Path, lo: float = -200, hi: float = 400, width: float = 5
 ) -> Path:
     edges = np.arange(lo, hi + width, width)
     counts, _ = np.histogram(rrp, bins=edges)
@@ -66,14 +66,17 @@ def price_histogram(
     below, above = int((rrp < lo).sum()), int((rrp >= hi).sum())
     fig, ax = plt.subplots(figsize=(11, 4.2))
     ax.bar(edges[:-1], counts, width=width * 0.9, align="edge", color=BLUE)
+    # Overflow bars keep a fixed $20 width so they stay visible next to narrow buckets. They hold
+    # many buckets' worth of intervals, so their height is not comparable with the main bars.
+    ow = 20.0
     for x, n, label in [
-        (lo - 3 * width, below, f"< \u2212${-lo:,.0f}"),
-        (hi + 2 * width, above, f"≥ ${hi:,.0f}"),
+        (lo - 2.5 * ow, below, f"< \u2212${-lo:,.0f}"),
+        (hi + 1.5 * ow, above, f"≥ ${hi:,.0f}"),
     ]:
-        ax.bar(x, n, width=width * 0.9, align="edge", color=INK)
+        ax.bar(x, n, width=ow * 0.9, align="edge", color=INK)
         ax.annotate(
             f"{label}\n{n:,}",
-            (x + width * 0.45, n),
+            (x + ow * 0.45, n),
             xytext=(0, 4),
             textcoords="offset points",
             ha="center",
@@ -109,12 +112,6 @@ def data_figures(prices: pd.DataFrame, out_dir: Path) -> list[Path]:
     """All data-overview figures. Returns the written paths."""
     m = monthly_means(prices)
     return [
-        monthly_bar(
-            m["rrp"],
-            "VIC1 average spot price (RRP) by month",
-            "$/MWh",
-            out_dir / "price_monthly.png",
-        ),
         monthly_bar(
             m["demand_mw"],
             "VIC1 average operational demand by month",

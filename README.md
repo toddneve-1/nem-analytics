@@ -18,25 +18,21 @@ locally as parquet (see *Quick start*).
 
 ### What the data looks like
 
-Monthly average prices swing from $17/MWh (October 2023) to $265/MWh (June 2025). Winters are
-usually dearest; spring, with plenty of wind and solar and mild demand, is cheapest. A few
-extreme intervals can dominate a month's average: June 2025 was driven by a small number of
-very high-priced intervals, not a month of uniformly high prices.
-
-![VIC1 average spot price by month](reports/figures/price_monthly.png)
-
 Demand has a clean yearly cycle, peaking in winter (heating) at about 5,900–6,400 MW on a monthly
 average basis. Demand alone does not explain price: winter 2025 demand was similar to winter
-2024, yet June 2025 prices were far higher.
+2024, yet June 2025 averaged $265/MWh, the dearest month in the data, driven by a small number of
+very high-priced intervals.
 
 ![VIC1 average operational demand by month](reports/figures/demand_monthly.png)
 
 The price distribution is the core of the problem. It has several peaks rather than one bell
-curve: the most common bucket is $0–$20 (16 % of intervals), 22 % of intervals are **negative**
-(midday solar; floor −$1,000/MWh), there is a broad hump of "normal" prices around $60–$120, and a
-long right tail: 0.8 % of intervals exceed $300/MWh, up to $19,070/MWh. A single "expected price"
-describes this poorly, which is why the models forecast quantiles and a spike probability.
-Overflow bars group the tails so that every interval is counted.
+curve: a sharp peak just above zero (the $5–$10 bucket alone holds 6.5 % of intervals), a cluster
+of **negative** prices around −$60 to −$30 (22 % of all intervals are negative, mostly midday
+solar; floor −$1,000/MWh), a broad hump of "normal" prices around $50–$130, and a long right tail:
+0.8 % of intervals exceed $300/MWh, up to $19,070/MWh. A single "expected price" describes this
+poorly, which is why the models forecast quantiles and a spike probability. The grey overflow
+bars group everything below −$200 or at $400 and above (wider bars, holding many buckets' worth
+of intervals), so every interval is counted.
 
 ![Distribution of VIC1 5-minute prices](reports/figures/price_distribution.png)
 
