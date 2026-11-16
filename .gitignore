@@ -11,5 +11,6 @@ build/
 # Data and run outputs are reproducible from code; never committed.
 /data/
 /mlruns/
+/mlartifacts/
 /mlflow.db
 /artefacts/

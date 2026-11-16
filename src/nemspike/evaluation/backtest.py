@@ -25,11 +25,17 @@ ForecasterFactory = Callable[[], list[Forecaster]]
 
 
 def run_backtest(
-    df: pd.DataFrame, make_models: ForecasterFactory, cfg: Config, stage: Stage = "dev"
+    df: pd.DataFrame,
+    make_models: ForecasterFactory,
+    cfg: Config,
+    stage: Stage = "dev",
+    diagnostics: list[dict] | None = None,
 ) -> pd.DataFrame:
     """Out-of-sample predictions for every fold and model.
 
-    ``make_models`` returns fresh, unfitted forecasters, so no state leaks between folds.
+    ``make_models`` returns fresh, unfitted forecasters, so no state leaks between folds. If
+    ``diagnostics`` is given, per-fold model diagnostics (for example the quantile crossing rate
+    and early-stopping rounds of LightGBM) are appended to it.
     """
     folds = walk_forward_folds(df.index.min(), df.index.max(), cfg.validation, stage)
     frames = []
@@ -40,6 +46,13 @@ def run_backtest(
         log.info("fold %s: %s train rows, %s test rows", fold.label, len(train), len(test))
         for model in make_models():
             fc = model.fit(train, threshold).predict(test)
+            if diagnostics is not None:
+                diag = {"fold": fold.number, "fold_label": fold.label, "model": model.name}
+                if hasattr(model, "crossing_rate"):
+                    diag["crossing_rate"] = model.crossing_rate
+                for key, rounds in getattr(model, "best_rounds", {}).items():
+                    diag[f"best_rounds.{key}"] = rounds
+                diagnostics.append(diag)
             out = pd.DataFrame(
                 {
                     "fold": fold.number,

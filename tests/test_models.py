@@ -71,6 +71,7 @@ def small_cfg(cfg: Config) -> Config:
     c.model.early_stopping_rounds = 10
     c.model.validation_days = 14
     c.model.min_data_in_leaf = 20
+    c.model.num_threads = 1  # small data; avoid contending with any running backtest
     return c
 
 

@@ -49,6 +49,7 @@ def _base_params(cfg: ModelConfig, seed: int) -> dict:
         "seed": seed,
         "deterministic": True,
         "force_row_wise": True,
+        "num_threads": cfg.num_threads,
         "verbosity": -1,
     }
 

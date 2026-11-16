@@ -112,6 +112,9 @@ class ModelConfig(BaseModel):
     lambda_l2: float = Field(ge=0)
     max_rounds: int = Field(ge=1)
     early_stopping_rounds: int = Field(ge=1)
+    # 0 = LightGBM default (all cores). Set lower when other heavy jobs share the machine:
+    # LightGBM threads spin while waiting, so two oversubscribed jobs slow each other badly.
+    num_threads: int = Field(default=0, ge=0)
 
     @field_validator("train_stride_minutes")
     @classmethod

@@ -64,6 +64,7 @@ model:
   lambda_l2: 1.0
   max_rounds: 2000
   early_stopping_rounds: 100
+  num_threads: 0            # 0 = all cores
 
 battery:
   power_mw: 100.0
