@@ -416,6 +416,25 @@ both git-ignored. Browse with `uv run mlflow ui --backend-store-uri sqlite:///ml
 **Why local MLflow.** It is the common open-source standard, needs no server for one person, and
 the same code points at a shared tracking server by changing one URI in the config.
 
+**Reproducibility check.** All backtests were re-run under MLflow tracking (12 runs: six models,
+two horizons) and compared with the earlier untracked run: all 12 prediction files were
+**bit-for-bit identical**, and so were the summary tables. Same code, data and seed give the same
+numbers on this machine.
+
+**Registered models.** `nemspike train-final --models lgbm_asinh` registered
+`nemspike-vic1-lgbm_asinh-h30` and `-h240`, version 1, each trained on about 366,000 origins with
+targets up to 1 July 2026 00:00 AEST (the holdout start), so they are the models to be scored once
+on the holdout. A smoke test loads a version from the registry and predicts quantiles, point
+forecast and spike probability.
+
+**LightGBM diagnostics (development folds, `reports/metrics/dev/h*_lgbm_asinh_diagnostics.csv`).**
+- Quantile crossing before sorting: 0.4–1.6 % of rows at 30 min and 0.3–2.1 % at 4 h; sorting
+  repairs it.
+- Early stopping chose a median of 419–544 trees for the median models, but the spike classifier
+  ran to 1,872–1,992 trees (near the 2,000 cap) in its worst folds. Candidate refinements, to be
+  tested on development folds only: a higher learning rate for the classifier, or a larger
+  early-stopping patience trade-off.
+
 **Operational lesson.** Two LightGBM jobs on the same 4-core machine slowed each other by an
 order of magnitude (a 40-second fold took over 10 minutes), because LightGBM's threads spin
 while waiting for CPU. The thread count is now configurable (`model.num_threads`) and the unit

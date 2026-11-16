@@ -63,6 +63,22 @@ uv run nemspike fetch-weather
 ```
 
 ```bash
+uv run nemspike backtest --models baselines,lgbm_asinh,lgbm_none
+```
+
+```bash
+uv run nemspike battery
+```
+
+```bash
+uv run nemspike train-final --models lgbm_asinh
+```
+
+```bash
+uv run mlflow ui --backend-store-uri sqlite:///mlflow.db
+```
+
+```bash
 uv run pytest
 ```
 
