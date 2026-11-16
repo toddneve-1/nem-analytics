@@ -479,6 +479,34 @@ kept as an upper bound.
   particular slots, and the schedule then "chases" spikes that do not recur.
 - Forecast-driven rolling-horizon dispatch: Step 9.
 
+**Results** (`nemspike battery`; 912 NEM days, 1 Jan 2024 – 30 Jun 2026, development folds only;
+100 MW / 200 MWh, 90 % round trip, 10–90 % state of charge).
+
+| Strategy | Revenue | Per day | $/MW-year | Capture vs perfect | Loss-making days | Cycles per day |
+|---|---|---|---|---|---|---|
+| Perfect foresight | $52.69 m | $57,778 | $210,888 | 100 % | 0 % | 4.87 |
+| Naive time-of-day | $22.04 m | $24,171 | $88,224 | **41.8 %** | 7 % | 3.37 |
+
+(Cycles = energy discharged ÷ 160 MWh usable capacity.)
+
+Checks on the saved dispatch, all 912 days: state of charge within 20–180 MWh, power ≤ 100 MW,
+no simultaneous charge and discharge, every day ends at 100 MWh, energy balance exact to 1e-13 MWh,
+and the naive strategy never beats perfect foresight on any day.
+
+Talking points:
+- **Revenue is concentrated in spikes.** The 5 best days earn 23 % of all perfect-foresight
+  revenue; the median day earns $40,619 and the 99th-percentile day $254,339. Missing a handful
+  of spike days costs more than months of ordinary trading, which is why spike forecasting is
+  the commercially relevant problem.
+- **A fixed daily schedule captures about 42 %.** "Charge at midday solar, discharge in the
+  evening peak" is worth something, but it misses the days that matter and loses money on 7 % of
+  days.
+- **Perfect foresight cycles 4.9 times a day**, far above a typical real battery (often around
+  1–2). With no degradation cost, the optimiser trades every 5-minute wiggle that covers the 10 %
+  round-trip loss. The $/MW-year figure is therefore an optimistic upper bound for energy
+  arbitrage alone, not a forecast of real earnings. Adding a throughput (degradation) cost per MWh
+  is a natural refinement, to agree before Step 9 because it changes every strategy.
+
 **Assumptions and limitations.** Price taker (no market impact), energy only (no FCAS), no
 degradation cost (so it may cycle on thin spreads), constant efficiency, no auxiliary load, no
 ramp limits, no network constraints or marginal loss factors, settlement at the 5-minute RRP.
