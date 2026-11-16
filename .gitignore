@@ -9,7 +9,7 @@ dist/
 build/
 
 # Data and run outputs are reproducible from code; never committed.
-data/
-mlruns/
-mlflow.db
-artefacts/
+/data/
+/mlruns/
+/mlflow.db
+/artefacts/
