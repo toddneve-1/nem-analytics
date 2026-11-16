@@ -130,6 +130,23 @@ wording.
 
 ---
 
+## Planned extensions (after the core pipeline)
+
+1. **AEMO pre-dispatch benchmark.** Compare the models against AEMO's own published forecasts:
+   5-minute pre-dispatch (P5MIN, next hour) for the 30-minute horizon and 30-minute pre-dispatch
+   (PREDISPATCH) for the 4-hour horizon. For each forecast origin, use only the most recent
+   pre-dispatch run *published before* that origin. This is a much stronger benchmark than
+   persistence, because pre-dispatch reflects participants' current bids. Pre-dispatch may then be
+   tried as a feature with the same as-of rule. To check: file sizes in the NEMWEB MMSDM archive
+   and whether NEMOSIS supports the required tables.
+2. **Melbourne Airport station observations** (NOAA Integrated Surface Database, METAR reports)
+   as a second, pluggable weather source: real-time-observable data versus ERA5 reanalysis.
+   Confirm WMO redistribution terms for non-US stations first.
+3. **Archived weather forecasts** (Open-Meteo historical-forecast API) for the 4-hour horizon,
+   with care over forecast issue times.
+
+---
+
 ## Limitations (maintained throughout)
 
 - Energy arbitrage only: no FCAS co-optimisation.
