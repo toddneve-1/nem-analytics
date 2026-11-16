@@ -72,6 +72,14 @@ uv run ruff check .
 
 See `docs/design_notes.md` for design decisions and limitations.
 
+### Saved results
+
+- `reports/metrics/<stage>/`: metric tables for every model (pooled and per fold), as CSV.
+- `results/predictions/dev/`: compact out-of-sample predictions of the default model
+  (`lgbm_asinh`) for every development-fold origin, so plots and the battery evaluation can be
+  reproduced without re-training (about 30 minutes). Regenerate everything with
+  `uv run nemspike backtest --models baselines,lgbm_asinh,lgbm_none`.
+
 ## Data attribution and licences
 
 - **AEMO.** Price and demand data © Australian Energy Market Operator (AEMO), used in accordance

@@ -103,3 +103,22 @@ def summarise(predictions: pd.DataFrame, cfg: Config, by_fold: bool = False) -> 
 
 def folds_for(df: pd.DataFrame, cfg: Config, stage: Stage = "dev") -> list[Fold]:
     return walk_forward_folds(df.index.min(), df.index.max(), cfg.validation, stage)
+
+
+SNAPSHOT_COLUMNS = ["origin", "fold", "model", "y", "point", "spike_prob"]
+
+
+def compact_predictions(predictions: pd.DataFrame) -> pd.DataFrame:
+    """A small copy of saved predictions for committing to the repository.
+
+    Keeps the forecast origin, fold, model, actual price, point forecast, quantiles and spike
+    probability, as 32-bit floats. Fold labels, target times and spike labels can be recomputed
+    from these and the config.
+    """
+    qcols = list(quantile_columns(predictions).values())
+    out = predictions[SNAPSHOT_COLUMNS + qcols].copy()
+    for c in ["y", "point", "spike_prob", *qcols]:
+        out[c] = out[c].astype("float32")
+    out["fold"] = out["fold"].astype("int8")
+    out["model"] = out["model"].astype("category")
+    return out

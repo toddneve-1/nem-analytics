@@ -142,6 +142,31 @@ def backtest(
             typer.echo(summary[[c for c in SUMMARY_COLUMNS if c in summary]].to_string())
 
 
+@app.command("snapshot-predictions")
+def snapshot_predictions(
+    models: str = typer.Option("lgbm_asinh", help="Comma-separated model names"),
+    stage: str = typer.Option("dev"),
+) -> None:
+    """Write compact copies of saved backtest predictions to results/predictions (committed)."""
+    import pandas as pd
+
+    from nemspike.evaluation.backtest import compact_predictions
+    from nemspike.pipeline import ARTEFACT_DIR
+
+    out_dir = Path("results") / "predictions" / stage
+    out_dir.mkdir(parents=True, exist_ok=True)
+    for h_dir in sorted((ARTEFACT_DIR / "backtest" / stage).glob("h*")):
+        for name in [m.strip() for m in models.split(",") if m.strip()]:
+            src = h_dir / f"{name}.parquet"
+            if not src.exists():
+                continue
+            dst = out_dir / f"{h_dir.name}_{name}.parquet"
+            compact_predictions(pd.read_parquet(src)).to_parquet(
+                dst, index=False, compression="zstd", compression_level=19
+            )
+            typer.echo(f"wrote {dst} ({dst.stat().st_size / 1e6:.1f} MB)")
+
+
 @app.command("train-final")
 def train_final(
     config: Path = ConfigOpt,
