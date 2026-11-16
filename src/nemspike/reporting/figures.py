@@ -121,3 +121,79 @@ def data_figures(prices: pd.DataFrame, out_dir: Path) -> list[Path]:
         price_histogram(prices["rrp"], out_dir / "price_distribution.png"),
         demand_histogram(prices["demand_mw"], out_dir / "demand_distribution.png"),
     ]
+
+
+ORANGE = "#eb6834"
+
+
+def horizon_summary(metric_dir: Path, model: str = "lgbm_asinh") -> pd.DataFrame:
+    """Per horizon: the model's MAE and PR-AUC, and the best baseline's, from summary CSVs."""
+    rows = []
+    for path in sorted(metric_dir.glob("h*_summary.csv")):
+        h = int(path.stem.split("_")[0][1:])
+        s = pd.read_csv(path, index_col=0)
+        if model not in s.index:
+            continue
+        base = s.drop(index=[i for i in s.index if i.startswith("lgbm")])
+        if base.empty:
+            continue
+        rows.append(
+            {
+                "horizon": h,
+                "model_mae": s.loc[model, "mae"],
+                "baseline_mae": base["mae"].min(),
+                "model_pr_auc": s.loc[model, "spike_pr_auc"],
+                "baseline_pr_auc": base["spike_pr_auc"].max(),
+                "base_rate": s.loc[model, "spike_base_rate"],
+            }
+        )
+    return pd.DataFrame(rows).sort_values("horizon").reset_index(drop=True)
+
+
+def horizon_figure(summary: pd.DataFrame, path: Path) -> Path:
+    """Two panels against forecast horizon: typical error and spike-alarm quality."""
+    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(11, 4.0))
+    x = summary["horizon"] / 60
+    panels = [
+        (ax1, "model_mae", "baseline_mae", "Typical error (MAE, $/MWh): lower is better"),
+        (ax2, "model_pr_auc", "baseline_pr_auc", "Spike alarm quality (PR-AUC): higher is better"),
+    ]
+    for ax, m, b, title in panels:
+        ax.plot(x, summary[m], color=BLUE, linewidth=2, marker="o", markersize=5, label="LightGBM")
+        ax.plot(
+            x,
+            summary[b],
+            color=ORANGE,
+            linewidth=2,
+            marker="o",
+            markersize=5,
+            label="Best baseline at each horizon",
+        )
+        for col, label in ((m, "LightGBM"), (b, "Best baseline")):
+            ax.annotate(
+                label,
+                (x.iloc[-1], summary[col].iloc[-1]),
+                xytext=(6, 0),
+                textcoords="offset points",
+                va="center",
+                fontsize=9,
+                color=INK,
+            )
+        ax.set_xlim(0, x.max() + 1.1)
+        ax.set_xticks(x, [f"{h:g}" for h in x])
+        ax.set_ylim(bottom=0)
+        ax.set_title(title, loc="left", fontsize=11)
+        ax.set_xlabel("Forecast horizon (hours)")
+        ax.grid(axis="y", alpha=0.3)
+        ax.spines[["top", "right"]].set_visible(False)
+    ax1.legend(frameon=False, loc="upper left", fontsize=9)
+    ax2.axhline(summary["base_rate"].iloc[0], color=INK, linewidth=0.8, linestyle="--")
+    ax2.annotate(
+        "random guessing",
+        (x.iloc[0], summary["base_rate"].iloc[0]),
+        xytext=(0, 4),
+        textcoords="offset points",
+        fontsize=8,
+        color=INK,
+    )
+    return _save(fig, path)

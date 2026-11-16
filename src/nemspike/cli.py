@@ -266,7 +266,7 @@ def battery(
 
 @app.command()
 def figures(config: Path = ConfigOpt) -> None:
-    """Write the README data-overview figures to reports/figures."""
+    """Write the README figures (data overview, forecast skill by horizon) to reports/figures."""
     from nemspike.data.aemo import load_price_demand
     from nemspike.pipeline import REPORT_DIR
     from nemspike.reporting.figures import data_figures
@@ -275,6 +275,13 @@ def figures(config: Path = ConfigOpt) -> None:
     d = cfg.data
     prices = load_price_demand(d.start, d.end, d.region, d.raw_dir)
     for path in data_figures(prices, REPORT_DIR / "figures"):
+        typer.echo(f"wrote {path}")
+
+    from nemspike.reporting.figures import horizon_figure, horizon_summary
+
+    summary = horizon_summary(REPORT_DIR / "metrics" / "dev")
+    if len(summary) >= 2:
+        path = horizon_figure(summary, REPORT_DIR / "figures" / "skill_by_horizon.png")
         typer.echo(f"wrote {path}")
 
 
