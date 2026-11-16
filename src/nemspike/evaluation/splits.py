@@ -8,17 +8,23 @@
   targets would overlap the first test intervals at long horizons.
 * **Boundaries** are NEM month starts (00:00 AEST), expressed in UTC.
 * Never random: shuffled splits would let the model train on the future.
+* **Final holdout.** If ``holdout_start`` is set, development folds stop there. The holdout is a
+  single extra fold, trained on everything before it, and is only produced on request
+  (``stage="holdout"``), so model choices cannot be tuned on it.
 """
 
 from __future__ import annotations
 
 from dataclasses import dataclass
+from typing import Literal
 
 import pandas as pd
 
 from nemspike.config import ValidationConfig
 from nemspike.features.build import TARGET, TARGET_TIME
-from nemspike.timeutils import NEM_TZ
+from nemspike.timeutils import NEM_TZ, nem_day_start_utc
+
+Stage = Literal["dev", "holdout"]
 
 
 @dataclass(frozen=True)
@@ -26,12 +32,14 @@ class Fold:
     number: int
     test_start: pd.Timestamp  # inclusive, UTC
     test_end: pd.Timestamp  # exclusive, UTC
+    is_holdout: bool = False
 
     @property
     def label(self) -> str:
         start = self.test_start.tz_convert(NEM_TZ)
         end = (self.test_end - pd.Timedelta(minutes=5)).tz_convert(NEM_TZ)
-        return f"{start:%Y-%m} to {end:%Y-%m}"
+        prefix = "holdout " if self.is_holdout else ""
+        return f"{prefix}{start:%Y-%m} to {end:%Y-%m}"
 
 
 def _nem_month_start(ts: pd.Timestamp) -> pd.Timestamp:
@@ -40,19 +48,36 @@ def _nem_month_start(ts: pd.Timestamp) -> pd.Timestamp:
 
 
 def walk_forward_folds(
-    first_origin: pd.Timestamp, last_origin: pd.Timestamp, cfg: ValidationConfig
+    first_origin: pd.Timestamp,
+    last_origin: pd.Timestamp,
+    cfg: ValidationConfig,
+    stage: Stage = "dev",
 ) -> list[Fold]:
-    """Test folds covering everything after the initial training window up to ``last_origin``."""
+    """Test folds after the initial training window.
+
+    ``stage="dev"``: quarterly folds up to the holdout start (or ``last_origin`` if no holdout).
+    ``stage="holdout"``: one fold from the holdout start to ``last_origin``.
+    """
+    end = last_origin + pd.Timedelta(1)
+    holdout_start = nem_day_start_utc(cfg.holdout_start) if cfg.holdout_start else None
+    if stage == "holdout":
+        if holdout_start is None:
+            raise ValueError("no holdout configured (validation.holdout_start)")
+        if holdout_start > last_origin:
+            raise ValueError("holdout starts after the last origin")
+        return [Fold(0, holdout_start, end, is_holdout=True)]
+
+    dev_end = min(end, holdout_start) if holdout_start is not None else end
     data_start = _nem_month_start(first_origin)
     test_start = (
         data_start.tz_convert(NEM_TZ) + pd.DateOffset(months=cfg.initial_train_months)
     ).tz_convert("UTC")
     folds: list[Fold] = []
-    while test_start <= last_origin:
+    while test_start < dev_end:
         test_end = (
             test_start.tz_convert(NEM_TZ) + pd.DateOffset(months=cfg.test_fold_months)
         ).tz_convert("UTC")
-        folds.append(Fold(len(folds), test_start, min(test_end, last_origin + pd.Timedelta(1))))
+        folds.append(Fold(len(folds), test_start, min(test_end, dev_end)))
         test_start = test_end
     if not folds:
         raise ValueError("not enough data for one test fold after the initial training window")

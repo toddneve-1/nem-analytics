@@ -15,7 +15,7 @@ import pandas as pd
 from nemspike.config import Config
 from nemspike.evaluation.labels import spike_labels, spike_threshold
 from nemspike.evaluation.metrics import forecast_metrics, quantile_columns
-from nemspike.evaluation.splits import Fold, split, walk_forward_folds
+from nemspike.evaluation.splits import Fold, Stage, split, walk_forward_folds
 from nemspike.features.build import TARGET, TARGET_TIME
 from nemspike.models.base import Forecaster
 
@@ -24,12 +24,14 @@ log = logging.getLogger(__name__)
 ForecasterFactory = Callable[[], list[Forecaster]]
 
 
-def run_backtest(df: pd.DataFrame, make_models: ForecasterFactory, cfg: Config) -> pd.DataFrame:
+def run_backtest(
+    df: pd.DataFrame, make_models: ForecasterFactory, cfg: Config, stage: Stage = "dev"
+) -> pd.DataFrame:
     """Out-of-sample predictions for every fold and model.
 
     ``make_models`` returns fresh, unfitted forecasters, so no state leaks between folds.
     """
-    folds = walk_forward_folds(df.index.min(), df.index.max(), cfg.validation)
+    folds = walk_forward_folds(df.index.min(), df.index.max(), cfg.validation, stage)
     frames = []
     for fold in folds:
         train, test = split(df, fold)
@@ -86,5 +88,5 @@ def summarise(predictions: pd.DataFrame, cfg: Config, by_fold: bool = False) -> 
     return out
 
 
-def folds_for(df: pd.DataFrame, cfg: Config) -> list[Fold]:
-    return walk_forward_folds(df.index.min(), df.index.max(), cfg.validation)
+def folds_for(df: pd.DataFrame, cfg: Config, stage: Stage = "dev") -> list[Fold]:
+    return walk_forward_folds(df.index.min(), df.index.max(), cfg.validation, stage)

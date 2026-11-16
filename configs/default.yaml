@@ -46,6 +46,8 @@ validation:
   # Embargo: a training row is used only if its target was realised before the test fold starts.
   initial_train_months: 12
   test_fold_months: 3
+  # Final holdout: never used for development or tuning; scored once with `--stage holdout`.
+  holdout_start: "2026-07-01"
 
 battery:
   power_mw: 100.0

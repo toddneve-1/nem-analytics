@@ -93,6 +93,9 @@ class SpikeConfig(BaseModel):
 class ValidationConfig(BaseModel):
     initial_train_months: int = Field(ge=1)
     test_fold_months: int = Field(ge=1)
+    # Start (NEM date) of the final holdout. Development folds stop here; the holdout is scored
+    # once, at the end, by a model trained on everything before it. None disables the holdout.
+    holdout_start: date | None = None
 
 
 class BatteryConfig(BaseModel):

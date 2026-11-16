@@ -44,6 +44,23 @@ def test_folds_for_project_period_are_quarterly_after_one_year() -> None:
         assert a.test_end == b.test_start  # contiguous, no overlap
 
 
+def test_holdout_is_excluded_from_dev_folds_and_scored_separately() -> None:
+    from datetime import date
+
+    first = pd.Timestamp("2023-01-07 14:05", tz=UTC)
+    last = pd.Timestamp("2026-10-31 14:00", tz=UTC)
+    vcfg = ValidationConfig(
+        initial_train_months=12, test_fold_months=3, holdout_start=date(2026, 7, 1)
+    )
+    dev = walk_forward_folds(first, last, vcfg, "dev")
+    holdout_start = pd.Timestamp("2026-06-30 14:00", tz=UTC)  # 00:00 AEST 1 Jul 2026
+    assert len(dev) == 10 and dev[-1].label == "2026-04 to 2026-06"
+    assert dev[-1].test_end == holdout_start
+    (h,) = walk_forward_folds(first, last, vcfg, "holdout")
+    assert h.is_holdout and h.test_start == holdout_start
+    assert h.label == "holdout 2026-07 to 2026-10"
+
+
 def _toy_frame(h_minutes: int) -> pd.DataFrame:
     origins = pd.date_range("2023-12-01 14:00", "2024-02-29 14:00", freq="5min", tz=UTC)
     return pd.DataFrame(
