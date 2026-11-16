@@ -1,0 +1,90 @@
+"""Walk-forward backtest: fit each forecaster per fold, collect out-of-sample predictions, score.
+
+Predictions are stored in long format (one row per origin per model) so any metric can be
+recomputed later without re-running models.
+"""
+
+from __future__ import annotations
+
+import logging
+from collections.abc import Callable
+
+import numpy as np
+import pandas as pd
+
+from nemspike.config import Config
+from nemspike.evaluation.labels import spike_labels, spike_threshold
+from nemspike.evaluation.metrics import forecast_metrics, quantile_columns
+from nemspike.evaluation.splits import Fold, split, walk_forward_folds
+from nemspike.features.build import TARGET, TARGET_TIME
+from nemspike.models.base import Forecaster
+
+log = logging.getLogger(__name__)
+
+ForecasterFactory = Callable[[], list[Forecaster]]
+
+
+def run_backtest(df: pd.DataFrame, make_models: ForecasterFactory, cfg: Config) -> pd.DataFrame:
+    """Out-of-sample predictions for every fold and model.
+
+    ``make_models`` returns fresh, unfitted forecasters, so no state leaks between folds.
+    """
+    folds = walk_forward_folds(df.index.min(), df.index.max(), cfg.validation)
+    frames = []
+    for fold in folds:
+        train, test = split(df, fold)
+        threshold = spike_threshold(train[TARGET], cfg.spike)
+        label = spike_labels(test[TARGET], threshold)
+        log.info("fold %s: %s train rows, %s test rows", fold.label, len(train), len(test))
+        for model in make_models():
+            fc = model.fit(train, threshold).predict(test)
+            out = pd.DataFrame(
+                {
+                    "fold": fold.number,
+                    "fold_label": fold.label,
+                    "model": model.name,
+                    TARGET_TIME: test[TARGET_TIME],
+                    "y": test[TARGET],
+                    "point": fc.point,
+                    "spike_threshold": threshold,
+                    "spike_label": label,
+                    "spike_prob": fc.spike_prob if fc.spike_prob is not None else np.nan,
+                },
+                index=test.index,
+            )
+            if fc.quantiles is not None:
+                out = out.join(fc.quantiles)
+            frames.append(out.reset_index())
+    return pd.concat(frames, ignore_index=True)
+
+
+def _score(group: pd.DataFrame, decision_probability: float) -> pd.Series:
+    qcols = list(quantile_columns(group).values())
+    has_q = bool(qcols) and group[qcols].notna().all().all()
+    has_spike = group["spike_prob"].notna().all()
+    return pd.Series(
+        forecast_metrics(
+            group["y"],
+            group["point"],
+            group[qcols] if has_q else None,
+            group["spike_label"] if has_spike else None,
+            group["spike_prob"] if has_spike else None,
+            decision_probability,
+        )
+    )
+
+
+def summarise(predictions: pd.DataFrame, cfg: Config, by_fold: bool = False) -> pd.DataFrame:
+    """Metrics per model, pooled over all test folds (or per fold with ``by_fold``)."""
+    keys = ["model", "fold_label"] if by_fold else ["model"]
+    rows = {
+        key: _score(g, cfg.spike.decision_probability)
+        for key, g in predictions.groupby(keys, sort=False)
+    }
+    out = pd.DataFrame(rows).T
+    out.index.names = keys
+    return out
+
+
+def folds_for(df: pd.DataFrame, cfg: Config) -> list[Fold]:
+    return walk_forward_folds(df.index.min(), df.index.max(), cfg.validation)

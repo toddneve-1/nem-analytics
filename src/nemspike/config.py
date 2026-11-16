@@ -85,6 +85,9 @@ class SpikeConfig(BaseModel):
     method: Literal["fixed", "percentile"]
     fixed_threshold: float
     percentile: float = Field(gt=0, lt=100)
+    # Probability above which a spike is "predicted", for precision and recall. PR-AUC does not
+    # depend on it.
+    decision_probability: float = Field(default=0.5, gt=0, lt=1)
 
 
 class ValidationConfig(BaseModel):

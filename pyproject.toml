@@ -45,7 +45,7 @@ src = ["src", "tests"]
 
 [tool.ruff.lint]
 select = ["E", "F", "W", "I", "B", "UP", "N", "SIM", "PD", "NPY", "RUF"]
-ignore = []
+ignore = ["PD010"]  # .unstack() is idiomatic for reshaping groupby results
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

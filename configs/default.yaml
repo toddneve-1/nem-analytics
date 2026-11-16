@@ -39,9 +39,11 @@ spike:
   method: fixed             # one of: fixed, percentile
   fixed_threshold: 300.0    # $/MWh
   percentile: 99.0          # used when method == percentile (computed on training fold only)
+  decision_probability: 0.5 # predicted P(spike) above this counts as a spike alert
 
 validation:
-  # Walk-forward: expanding training window, test folds of this length, embargo = horizon.
+  # Walk-forward: expanding training window, then consecutive test folds of this length.
+  # Embargo: a training row is used only if its target was realised before the test fold starts.
   initial_train_months: 12
   test_fold_months: 3
 
