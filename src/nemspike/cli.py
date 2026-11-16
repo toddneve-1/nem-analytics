@@ -196,6 +196,7 @@ def battery(
     degradation_costs: str = typer.Option(
         "", help="Comma-separated $/MWh wear costs for a sensitivity run (default: config value)"
     ),
+    track: bool = typer.Option(True, help="Log each wear-cost run to MLflow"),
 ) -> None:
     """Battery revenue for perfect foresight and the naive time-of-day strategy."""
     from dataclasses import replace
@@ -245,9 +246,16 @@ def battery(
         tag = f"deg{cost:g}"
         dispatch.to_parquet(out_dir / f"dispatch_{tag}.parquet", index=False)
         daily = daily_results(dispatch, spec)
-        daily.to_csv(metric_dir / f"battery_daily_{tag}.csv", index=False)
-        summaries.append(summarise_strategies(daily, spec).assign(degradation_cost_per_mwh=cost))
+        daily_csv = metric_dir / f"battery_daily_{tag}.csv"
+        daily.to_csv(daily_csv, index=False)
+        one = summarise_strategies(daily, spec)
+        summaries.append(one.assign(degradation_cost_per_mwh=cost))
         typer.echo(f"degradation cost ${cost:g}/MWh: done ({daily['nem_day'].nunique()} days)")
+        if track:
+            from nemspike.tracking.mlflow_utils import log_battery
+
+            run_id = log_battery(cfg, config, stage, cost, one, daily_csv)
+            typer.echo(f"  logged to MLflow run {run_id}")
 
     summary = pd.concat(summaries).set_index("degradation_cost_per_mwh", append=True)
     summary = summary.reorder_levels(["degradation_cost_per_mwh", "strategy"]).sort_index()

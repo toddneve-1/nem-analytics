@@ -68,3 +68,21 @@ def test_train_and_register_creates_loadable_versions(tracked_cfg: Config) -> No
     out = loaded.predict(sample)
     assert {"q0.1", "q0.5", "q0.9", "q0.99", "point", "spike_prob"} <= set(out.columns)
     pd.testing.assert_series_equal(out["point"], sample["rrp_lag_0"], check_names=False)
+
+
+def test_log_battery_records_strategy_metrics(tracked_cfg: Config, tmp_path: Path) -> None:
+    import mlflow
+
+    from nemspike.tracking.mlflow_utils import log_battery
+
+    summary = pd.DataFrame(
+        {"net_revenue": [100.0, 40.0], "capture_vs_perfect": [1.0, 0.4]},
+        index=pd.Index(["perfect_foresight", "naive_time_of_day"], name="strategy"),
+    )
+    daily = tmp_path / "daily.csv"
+    daily.write_text("strategy,nem_day,net_revenue\n")
+    run_id = log_battery(tracked_cfg, DEFAULT_CONFIG, "dev", 10.0, summary, daily)
+    run = mlflow.MlflowClient(tracked_cfg.tracking.mlflow_tracking_uri).get_run(run_id)
+    assert run.data.metrics["naive_time_of_day.capture_vs_perfect"] == 0.4
+    assert run.data.tags["kind"] == "battery"
+    assert run.data.tags["degradation_cost_per_mwh"] == "10"

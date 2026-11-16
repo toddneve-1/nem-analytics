@@ -107,3 +107,31 @@ def log_backtest(
         by_fold.to_csv(tmp)
         mlflow.log_artifact(str(tmp))
         return run.info.run_id
+
+
+def log_battery(
+    cfg: Config,
+    config_path: Path,
+    stage: str,
+    degradation_cost: float,
+    summary: pd.DataFrame,
+    daily_csv: Path,
+) -> str:
+    """Record one battery-strategy evaluation (one wear cost). Returns the MLflow run id.
+
+    Metrics are prefixed by strategy, for example ``perfect_foresight.net_revenue``.
+    """
+    mlflow = _mlflow()
+    setup(cfg)
+    with mlflow.start_run(run_name=f"{stage}-battery-deg{degradation_cost:g}") as run:
+        mlflow.set_tags(
+            {"stage": stage, "kind": "battery", "degradation_cost_per_mwh": f"{degradation_cost:g}"}
+            | git_state()
+        )
+        mlflow.log_params(flatten(cfg.model_dump(mode="json")))
+        mlflow.log_param("battery.degradation_cost_used", degradation_cost)
+        for strategy, row in summary.iterrows():
+            mlflow.log_metrics({f"{strategy}.{k}": v for k, v in _finite(row.to_dict()).items()})
+        mlflow.log_artifact(str(config_path))
+        mlflow.log_artifact(str(daily_csv))
+        return run.info.run_id
