@@ -210,6 +210,74 @@ errors).
 
 ---
 
+## 5. Walk-forward evaluation, baselines and metrics
+
+**Splits.** Expanding-window walk-forward. The first training window is 2023; then 12 test folds:
+each quarter of 2024 and 2025, Q1–Q3 2026, and October 2026. Each fold re-trains on everything
+before it, as a desk would periodically re-train. Fold boundaries are NEM month starts (00:00 AEST).
+Never random splits: shuffling would let the model learn from the future.
+
+**Embargo.** A training row is used only if its target interval had ended by the start of the
+test fold (`target_time <= test_start`). At the 4-hour horizon this removes the last 4 hours of
+training origins, whose targets fall inside the test period.
+
+**Spike label.** Price strictly above the threshold ($300/MWh fixed by default). With the
+percentile option, the threshold is computed on the **training fold's targets only**.
+
+**Baselines.**
+- Point: persistence (latest price), same time yesterday, same time last week, aligned to the
+  *target's* time of day.
+- Made probabilistic so they can be scored like the quantile models: point + empirical quantiles
+  of that baseline's own training-fold errors, estimated **per target hour of day**. Spike
+  probability is the training spike rate given whether the reference price was itself a spike.
+- Climatology: training-fold quantiles and spike rate by target hour of day, ignoring recent
+  history.
+All forecasters share one `fit(train, threshold)` / `predict(test)` interface, so baselines and
+LightGBM are scored by the same backtest code on exactly the same rows.
+
+**Metrics and why.**
+- MAE and RMSE on the point forecast. RMSE is dominated by a few huge spikes; MAE reflects typical
+  error. Both are reported.
+- Pinball loss per quantile: the proper scoring rule for quantile forecasts (minimised in
+  expectation by the true quantile; a test checks this).
+- Calibration: share of outcomes below each quantile (ideally q) and q10–q90 coverage (ideally
+  80 %).
+- Spikes: PR-AUC (average precision), precision and recall at P ≥ 0.5, Brier score. With a base
+  rate under 1 %, accuracy and ROC-AUC flatter weak models; PR-AUC is read against the base rate,
+  which is what a random classifier scores.
+
+**Baseline results** (`nemspike backtest-baselines`; 12 folds, Jan 2024 – Oct 2026; about
+298,000 test origins per horizon; spike base rate 0.84 %, 2,501 spike intervals).
+
+| Horizon | Model | MAE | RMSE | Mean pinball | q10–q90 coverage | Spike PR-AUC |
+|---|---|---|---|---|---|---|
+| 30 min | persistence | 23.58 | 227.31 | 8.02 | 0.832 | 0.366 |
+| 30 min | same time yesterday | 63.29 | 414.73 | 20.25 | 0.801 | 0.052 |
+| 30 min | same time last week | 79.06 | 427.08 | 24.10 | 0.791 | 0.012 |
+| 30 min | climatology | 62.83 | 309.60 | 18.86 | 0.804 | 0.026 |
+| 4 h | persistence | 68.48 | 423.50 | 18.97 | 0.807 | 0.015 |
+| 4 h | same time yesterday | 63.29 | 414.76 | 20.25 | 0.801 | 0.052 |
+| 4 h | same time last week | 79.06 | 427.11 | 24.10 | 0.791 | 0.012 |
+| 4 h | climatology | 62.84 | 309.62 | 18.87 | 0.804 | 0.026 |
+
+(MAE, RMSE and pinball in $/MWh.)
+
+Talking points:
+- At 30 minutes, persistence is hard to beat: prices are sticky, and its spike PR-AUC (0.37) is
+  about 44 times the base rate. At 4 hours its edge disappears and spikes are close to
+  unpredictable for every baseline. That is where a model must earn its place.
+- Pooled coverage looks right (about 80 %), but per fold persistence ranges from 68 % (Q2 2024,
+  volatile) to 93 % (Q2 2026, calm). Error distributions learned from the past are too narrow in
+  turbulent periods and too wide in calm ones. Volatility is non-stationary, which motivates drift
+  monitoring and possibly a shorter or weighted training window.
+- Spike counts vary from 661 (Q2 2024) to 15 (Q4 2025) per fold, so per-fold results matter;
+  pooled numbers are dominated by the volatile quarters.
+- Precision is undefined (NaN) for baselines that never reach P ≥ 0.5: climatology's highest
+  hourly spike rate is 0.058. That is why PR-AUC, which needs no threshold, is the headline spike
+  metric.
+
+---
+
 ## Planned extensions (after the core pipeline)
 
 1. **AEMO pre-dispatch benchmark.** Compare the models against AEMO's own published forecasts:
