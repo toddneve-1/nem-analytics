@@ -83,6 +83,7 @@ def backtest(
     models: str = typer.Option("baselines", help="Comma-separated model names or 'baselines'"),
     stage: str = typer.Option("dev", help="'dev' (development folds) or 'holdout' (final test)"),
     horizons: str = typer.Option("", help="Comma-separated horizons in minutes (default: config)"),
+    track: bool = typer.Option(True, help="Log each model's run to MLflow"),
 ) -> None:
     """Walk-forward backtest. Saves predictions per model, then a summary of all saved models."""
     import pandas as pd
@@ -109,8 +110,23 @@ def backtest(
         df = build_features(prices, weather, h, cfg)
         for name in names:
             typer.echo(f"h={h} min: running {name}")
-            preds = run_backtest(df, lambda name=name: [make_model(name, cfg)], cfg, stage)
+            diagnostics: list[dict] = []
+            preds = run_backtest(
+                df, lambda name=name: [make_model(name, cfg)], cfg, stage, diagnostics
+            )
             preds.to_parquet(pred_dir / f"{name}.parquet", index=False)
+            diag = pd.DataFrame(diagnostics).set_index("fold_label").drop(columns=["model"])
+            if diag.shape[1] > 1:
+                diag.to_csv(metric_dir / f"h{h}_{name}_diagnostics.csv")
+            if track:
+                from nemspike.tracking.mlflow_utils import log_backtest
+
+                by_fold = summarise(preds, cfg, by_fold=True).droplevel("model")
+                by_fold = by_fold.join(diag.drop(columns=["fold"]), how="left")
+                run_id = log_backtest(
+                    cfg, config, stage, h, name, summarise(preds, cfg).iloc[0], by_fold
+                )
+                typer.echo(f"  logged to MLflow run {run_id}")
 
         # Summarise every model saved for this stage and horizon, so slow and fast models can be
         # run separately but compared on the same rows.
@@ -124,6 +140,94 @@ def backtest(
         )
         with pd.option_context("display.width", 250, "display.precision", 3):
             typer.echo(summary[[c for c in SUMMARY_COLUMNS if c in summary]].to_string())
+
+
+@app.command("train-final")
+def train_final(
+    config: Path = ConfigOpt,
+    models: str = typer.Option("lgbm_asinh", help="Comma-separated model names"),
+    horizons: str = typer.Option("", help="Comma-separated horizons in minutes (default: config)"),
+    cutoff: str = typer.Option("holdout", help="'holdout' (train before holdout) or 'end'"),
+) -> None:
+    """Fit final models and register each as a new version in the MLflow Model Registry."""
+    from nemspike.models.registry import expand
+    from nemspike.tracking.registry import train_and_register
+
+    cfg = load_config(config)
+    hs = [int(h) for h in horizons.split(",")] if horizons else cfg.forecast.horizons_minutes
+    for name in expand([m.strip() for m in models.split(",") if m.strip()]):
+        for h in hs:
+            v = train_and_register(cfg, name, h, cutoff)
+            typer.echo(
+                f"registered {v.name} version {v.version} "
+                f"(trained on {v.n_train:,} rows, targets to {v.train_end}; run {v.run_id})"
+            )
+
+
+@app.command()
+def battery(
+    config: Path = ConfigOpt,
+    stage: str = typer.Option("dev", help="'dev' (development folds) or 'holdout' (final test)"),
+) -> None:
+    """Battery revenue for perfect foresight and the naive time-of-day strategy."""
+    import pandas as pd
+
+    from nemspike.battery.lp import BatterySpec
+    from nemspike.battery.strategies import (
+        daily_results,
+        naive_time_of_day,
+        perfect_foresight,
+        summarise_strategies,
+    )
+    from nemspike.data.aemo import load_price_demand
+    from nemspike.evaluation.splits import walk_forward_folds
+    from nemspike.pipeline import ARTEFACT_DIR, REPORT_DIR
+
+    if stage not in ("dev", "holdout"):
+        raise typer.BadParameter("stage must be 'dev' or 'holdout'")
+    cfg = load_config(config)
+    d = cfg.data
+    spec = BatterySpec.from_config(cfg.battery)
+    prices = load_price_demand(d.start, d.end, d.region, d.raw_dir)
+    ends = prices["interval_end"]
+    folds = walk_forward_folds(ends.min(), ends.max(), cfg.validation, stage)  # type: ignore[arg-type]
+
+    frames = []
+    for fold in folds:
+        # Intervals whose start lies in the fold's test period.
+        in_test = (ends > fold.test_start) & (ends <= fold.test_end)
+        train = prices[ends <= fold.test_start]
+        test = prices[in_test]
+        frames.append(perfect_foresight(test, spec).assign(fold_label=fold.label))
+        frames.append(naive_time_of_day(train, test, spec).assign(fold_label=fold.label))
+        typer.echo(f"{fold.label}: {test['interval_end'].size // 288} days")
+    dispatch = pd.concat(frames, ignore_index=True)
+
+    out_dir = ARTEFACT_DIR / "battery" / stage
+    out_dir.mkdir(parents=True, exist_ok=True)
+    dispatch.to_parquet(out_dir / "dispatch.parquet", index=False)
+    daily = daily_results(dispatch)
+    summary = summarise_strategies(daily, spec)
+    metric_dir = REPORT_DIR / "metrics" / stage
+    metric_dir.mkdir(parents=True, exist_ok=True)
+    summary.to_csv(metric_dir / "battery_summary.csv")
+    daily.to_csv(metric_dir / "battery_daily.csv", index=False)
+    with pd.option_context("display.width", 200, "display.precision", 3):
+        typer.echo(summary.to_string())
+
+
+@app.command()
+def figures(config: Path = ConfigOpt) -> None:
+    """Write the README data-overview figures to reports/figures."""
+    from nemspike.data.aemo import load_price_demand
+    from nemspike.pipeline import REPORT_DIR
+    from nemspike.reporting.figures import data_figures
+
+    cfg = load_config(config)
+    d = cfg.data
+    prices = load_price_demand(d.start, d.end, d.region, d.raw_dir)
+    for path in data_figures(prices, REPORT_DIR / "figures"):
+        typer.echo(f"wrote {path}")
 
 
 if __name__ == "__main__":

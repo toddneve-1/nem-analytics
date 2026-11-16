@@ -336,6 +336,102 @@ LightGBM can still differ slightly across machines or thread counts.
 
 ---
 
+## 7. Experiment tracking and versioned models (MLflow, local)
+
+**What is tracked.** Every `nemspike backtest` run logs one MLflow run per (stage, horizon,
+model):
+- the full config, flattened to parameters (for example `model.learning_rate`, `seed`);
+- tags: stage (`dev` or `holdout`), horizon, model, **git commit** and whether the working tree
+  had uncommitted changes;
+- pooled metrics (MAE, pinball per quantile, coverage, PR-AUC and so on);
+- per-fold metrics as a series (step = fold number), plus LightGBM diagnostics per fold
+  (quantile crossing rate, early-stopping rounds);
+- the config file and per-fold table as artefacts.
+
+So any number in the README can be traced to a run, a commit, a config and a seed.
+
+**Versioned models.** `nemspike train-final` fits a model on all data up to a cut-off (by default
+the holdout start) and registers it in the MLflow **Model Registry** as a new version
+(`nemspike-vic1-lgbm_asinh-h30` version 1, 2, ...). Each version is an MLflow `pyfunc` model
+wrapping the fitted forecaster: `predict(features)` returns the quantiles, the point forecast and
+the spike probability. Versions are tagged with their training window, spike threshold and git
+commit. Package versions are pinned explicitly from the environment rather than inferred.
+
+**Storage.** Local SQLite (`mlflow.db`) for runs and the registry, `mlartifacts/` for files;
+both git-ignored. Browse with `uv run mlflow ui --backend-store-uri sqlite:///mlflow.db`.
+
+**Why local MLflow.** It is the common open-source standard, needs no server for one person, and
+the same code points at a shared tracking server by changing one URI in the config.
+
+**Operational lesson.** Two LightGBM jobs on the same 4-core machine slowed each other by an
+order of magnitude (a 40-second fold took over 10 minutes), because LightGBM's threads spin
+while waiting for CPU. The thread count is now configurable (`model.num_threads`) and the unit
+tests use one thread.
+
+---
+
+## 8. Battery optimiser and benchmark strategies
+
+**Formulation (per NEM day, 288 five-minute intervals, dt = 1/12 h).**
+
+    maximise   Σ_t p_t (d_t − c_t) dt                             (revenue at the actual RRP)
+    subject to s_t = s_{t−1} + η c_t dt − d_t dt / η                (energy balance)
+               0 ≤ c_t, d_t ≤ 100 MW                              (power)
+               20 ≤ s_t ≤ 180 MWh                                 (10–90 % of 200 MWh)
+               s_0 = s_288 = 100 MWh                              (start and end each day at 50 %)
+
+with η = √0.9 on each leg (90 % round trip). Battery parameters come from the config.
+
+**Daily decomposition.** Each NEM day starts and ends at 50 % state of charge, so days are
+independent and strategies are compared on identical terms. Cost: energy cannot be carried
+overnight between days. This restriction applies equally to all strategies.
+
+**The negative-price problem.** The plain LP, at negative prices with a full battery, charges and
+discharges *at the same time*: the round-trip losses turn the battery into a load that is paid to
+consume. A real battery has one inverter and cannot do this. On 40 sampled real days the LP did
+this in 909 intervals and overstated revenue by 0.45 % (up to $2,336 on one day).
+
+Forbidding it makes the problem non-convex. Approaches tried:
+
+| Approach | Result on 40 sampled days |
+|---|---|
+| Plain LP | 0.4 s, but physically impossible dispatch; an upper bound |
+| MILP, binary on every negative-price interval | Exact, but one day took 292 s (days with ~200 negative intervals) |
+| LP, then "repair" the overlap | Fast, but 0.5 % below exact |
+| Iteratively forbid discharge where the LP overlaps | Fast, 0.8 % below exact |
+| Lazy MILP (binaries only where the LP overlaps) | Exact, but still up to 200 s on hard days |
+| Tighter MIP gap and price tie-breaking | No material speed-up on hard days |
+| **Hybrid: LP, with dynamic programme fallback** | **0.7 s for 40 days, within 0.02 % of exact, never overlaps** |
+
+**Chosen method (`method="hybrid"`).**
+1. Solve the LP. If it has no simultaneous charge and discharge at a negative price, it is
+   provably optimal for the real (exclusive) problem. Any overlap at prices ≥ 0 is removed by
+   reducing charge by x and discharge by η²x, which leaves the state of charge unchanged and
+   cannot lower revenue.
+2. Otherwise solve a **dynamic programme**: state of charge on a grid of 0.44 MWh steps,
+   backward induction over the 288 intervals, one action per interval (charge, discharge or idle,
+   so overlap is impossible by construction). The grid is anchored on the starting state of
+   charge and sized so that full charge power (18 steps) and full discharge power
+   (20 steps) are exactly representable at 90 % round-trip efficiency.
+
+The exact MILP is kept for validation (tests compare the hybrid against it), and the plain LP is
+kept as an upper bound.
+
+**Strategies.**
+- **Perfect foresight:** optimise each day on its actual prices. Upper bound.
+- **Naive time-of-day:** average price for each 5-minute slot of the day over the training
+  period (all data before the test fold), optimise once on that average day, then repeat the
+  fixed schedule every test day. No forecasts, no test-period information; re-fitted for each
+  fold. It can lose money: averaging prices by slot picks up spikes that happened to fall in
+  particular slots, and the schedule then "chases" spikes that do not recur.
+- Forecast-driven rolling-horizon dispatch: Step 9.
+
+**Assumptions and limitations.** Price taker (no market impact), energy only (no FCAS), no
+degradation cost (so it may cycle on thin spreads), constant efficiency, no auxiliary load, no
+ramp limits, no network constraints or marginal loss factors, settlement at the 5-minute RRP.
+
+---
+
 ## Planned extensions (after the core pipeline)
 
 1. **AEMO pre-dispatch benchmark.** Compare the models against AEMO's own published forecasts:
