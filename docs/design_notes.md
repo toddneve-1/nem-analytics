@@ -212,10 +212,18 @@ errors).
 
 ## 5. Walk-forward evaluation, baselines and metrics
 
-**Splits.** Expanding-window walk-forward. The first training window is 2023; then 12 test folds:
-each quarter of 2024 and 2025, Q1–Q3 2026, and October 2026. Each fold re-trains on everything
+**Splits.** Expanding-window walk-forward. The first training window is 2023; then 10
+development test folds: each quarter of 2024 and 2025, and Q1–Q2 2026. Jul–Oct 2026 is a final
+holdout (see below). Each fold re-trains on everything
 before it, as a desk would periodically re-train. Fold boundaries are NEM month starts (00:00 AEST).
 Never random splits: shuffling would let the model learn from the future.
+
+**Final holdout (Jul–Oct 2026).** All development, model comparison and tuning use the 10
+development folds only. The holdout is one extra fold, trained on everything before 1 July 2026,
+scored once at the end with `--stage holdout`. Reason: even though no single model sees the
+future, *I* see the results of every fold, and repeatedly choosing settings that look best on
+those folds makes them optimistic. A period never looked at during development gives an honest
+final estimate.
 
 **Embargo.** A training row is used only if its target interval had ended by the start of the
 test fold (`target_time <= test_start`). At the 4-hour horizon this removes the last 4 hours of
@@ -246,25 +254,26 @@ LightGBM are scored by the same backtest code on exactly the same rows.
   rate under 1 %, accuracy and ROC-AUC flatter weak models; PR-AUC is read against the base rate,
   which is what a random classifier scores.
 
-**Baseline results** (`nemspike backtest-baselines`; 12 folds, Jan 2024 – Oct 2026; about
-298,000 test origins per horizon; spike base rate 0.84 %, 2,501 spike intervals).
+**Baseline results** (`nemspike backtest --models baselines`; 10 development folds, Jan 2024 –
+Jun 2026; 262,656 test origins per horizon; spike base rate 0.91 %, 2,402 spike intervals).
+Jul–Oct 2026 is the final holdout and is not included.
 
 | Horizon | Model | MAE | RMSE | Mean pinball | q10–q90 coverage | Spike PR-AUC |
 |---|---|---|---|---|---|---|
-| 30 min | persistence | 23.58 | 227.31 | 8.02 | 0.832 | 0.366 |
-| 30 min | same time yesterday | 63.29 | 414.73 | 20.25 | 0.801 | 0.052 |
-| 30 min | same time last week | 79.06 | 427.08 | 24.10 | 0.791 | 0.012 |
-| 30 min | climatology | 62.83 | 309.60 | 18.86 | 0.804 | 0.026 |
-| 4 h | persistence | 68.48 | 423.50 | 18.97 | 0.807 | 0.015 |
-| 4 h | same time yesterday | 63.29 | 414.76 | 20.25 | 0.801 | 0.052 |
-| 4 h | same time last week | 79.06 | 427.11 | 24.10 | 0.791 | 0.012 |
-| 4 h | climatology | 62.84 | 309.62 | 18.87 | 0.804 | 0.026 |
+| 30 min | persistence | 24.90 | 234.90 | 8.45 | 0.822 | 0.357 |
+| 30 min | same time yesterday | 65.47 | 436.97 | 21.22 | 0.798 | 0.057 |
+| 30 min | same time last week | 81.44 | 449.91 | 25.20 | 0.786 | 0.012 |
+| 30 min | climatology | 65.62 | 326.31 | 19.86 | 0.793 | 0.027 |
+| 4 h | persistence | 72.57 | 446.54 | 20.18 | 0.796 | 0.015 |
+| 4 h | same time yesterday | 65.48 | 436.97 | 21.22 | 0.798 | 0.057 |
+| 4 h | same time last week | 81.45 | 449.91 | 25.21 | 0.785 | 0.012 |
+| 4 h | climatology | 65.63 | 326.32 | 19.86 | 0.793 | 0.027 |
 
 (MAE, RMSE and pinball in $/MWh.)
 
 Talking points:
-- At 30 minutes, persistence is hard to beat: prices are sticky, and its spike PR-AUC (0.37) is
-  about 44 times the base rate. At 4 hours its edge disappears and spikes are close to
+- At 30 minutes, persistence is hard to beat: prices are sticky, and its spike PR-AUC (0.36) is
+  about 39 times the base rate. At 4 hours its edge disappears and spikes are close to
   unpredictable for every baseline. That is where a model must earn its place.
 - Pooled coverage looks right (about 80 %), but per fold persistence ranges from 68 % (Q2 2024,
   volatile) to 93 % (Q2 2026, calm). Error distributions learned from the past are too narrow in
@@ -275,6 +284,55 @@ Talking points:
 - Precision is undefined (NaN) for baselines that never reach P ≥ 0.5: climatology's highest
   hourly spike rate is 0.058. That is why PR-AUC, which needs no threshold, is the headline spike
   metric.
+
+---
+
+## 6. LightGBM quantile models and spike classifier
+
+**Model.** Gradient-boosted trees (LightGBM), one booster per quantile (q0.1, q0.5, q0.9, q0.99)
+with the pinball (quantile) loss, plus one binary classifier for P(price > $300/MWh). Separate
+models per horizon (direct forecasting). Point forecast = q0.5 (the median).
+
+**Why gradient boosting.** Tabular features with strong interactions (hour × recent volatility ×
+temperature), mixed scales, no need to normalise, robust to irrelevant features, fast on
+hundreds of thousands of rows, and native quantile and binary objectives.
+
+**Target transform: asinh(price / 100).**
+- Near-linear for ordinary prices, log-like for the tail, defined for negative prices (unlike
+  log, which fails on the 22 % of negative intervals).
+- Quantiles map exactly through any increasing transform, so the back-transformed quantile
+  forecasts are unbiased. Means do not, which is another reason the point forecast is the median.
+- Effect: the model weights *relative* errors on big prices, rather than letting a single
+  $15,000 interval dominate the loss.
+- Tested empirically: `lgbm_asinh` against `lgbm_none` (raw prices) on identical folds.
+
+**Fitting procedure (per fold, per quantile and for the classifier).**
+1. **Training stride 15 minutes.** Train on every third origin; neighbouring 5-minute rows are
+   nearly duplicates. Testing uses every origin.
+2. **Early stopping inside the training fold.** The last 60 days of the training fold are the
+   validation window, with the same embargo rule: inner-training targets must be realised before
+   the window starts. The test fold is never used for any fitting decision.
+3. **Refit** on the whole training fold with the chosen number of trees, so the most recent
+   60 days, which matter most in a changing market, are not left out of the final model.
+4. Fixed hyperparameters (learning rate 0.05, 31 leaves, at least 200 rows per leaf, 80 % feature
+   and row sampling, L2 = 1). No hyperparameter search yet; any later tuning uses development
+   folds only.
+
+**Quantile crossing.** Separately trained quantile models can cross (for example q0.9 < q0.5 in
+some rows). We record the crossing rate and then sort each row. Sorting can only reduce total
+pinball loss, so it is a safe repair.
+
+**Spike classifier.**
+- No class re-weighting. Re-weighting improves nothing for PR-AUC (a ranking metric) and would
+  distort the outputs away from true probabilities, which a trader needs for expected-value
+  decisions.
+- **Early stopping on log loss, not average precision.** First run: early stopping on average
+  precision ran to 1,992 of 2,000 trees, because average precision computed on a 60-day window
+  with a handful of spikes is too noisy to stop on. Log loss is smooth and a proper scoring rule.
+
+**Reproducibility.** `seed` from the config, LightGBM `deterministic=True` and
+`force_row_wise=True`; a test checks two fits with the same seed give identical predictions.
+LightGBM can still differ slightly across machines or thread counts.
 
 ---
 
