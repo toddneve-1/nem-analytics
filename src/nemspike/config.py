@@ -60,6 +60,27 @@ class ForecastConfig(BaseModel):
         return sorted(v)
 
 
+class FeaturesConfig(BaseModel):
+    price_lags_intervals: list[int]
+    rolling_windows_minutes: list[int]
+    count_above_thresholds: list[float]
+    weather_builders: list[str]
+
+    @field_validator("price_lags_intervals")
+    @classmethod
+    def _non_negative_lags(cls, v: list[int]) -> list[int]:
+        if any(k < 0 for k in v):
+            raise ValueError("lags must be >= 0 (0 is the latest completed interval)")
+        return sorted(set(v))
+
+    @field_validator("rolling_windows_minutes")
+    @classmethod
+    def _window_multiples(cls, v: list[int]) -> list[int]:
+        if any(w <= 5 or w % 5 for w in v):
+            raise ValueError("rolling windows must be multiples of 5 minutes and > 5")
+        return sorted(set(v))
+
+
 class SpikeConfig(BaseModel):
     method: Literal["fixed", "percentile"]
     fixed_threshold: float
@@ -97,6 +118,7 @@ class Config(BaseModel):
     seed: int
     data: DataConfig
     forecast: ForecastConfig
+    features: FeaturesConfig
     spike: SpikeConfig
     validation: ValidationConfig
     battery: BatteryConfig

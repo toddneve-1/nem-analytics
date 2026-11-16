@@ -25,6 +25,16 @@ forecast:
   target_transform: asinh   # one of: none, asinh
   asinh_scale: 100.0        # $/MWh; asinh(price / scale)
 
+features:
+  # Lags in 5-minute intervals before the forecast origin (0 = latest completed interval).
+  price_lags_intervals: [0, 1, 2, 3, 6, 12, 24, 48]
+  # Trailing windows ending at the origin for rolling statistics.
+  rolling_windows_minutes: [60, 240, 1440]
+  # Fixed $/MWh levels for "intervals above X in the window" features. Constants, so no leakage.
+  count_above_thresholds: [300.0]
+  # Pluggable weather feature builders (see nemspike.features.weather).
+  weather_builders: [basic]
+
 spike:
   method: fixed             # one of: fixed, percentile
   fixed_threshold: 300.0    # $/MWh

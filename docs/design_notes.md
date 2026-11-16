@@ -130,6 +130,86 @@ wording.
 
 ---
 
+## 3. Weather loader (Open-Meteo, ERA5)
+
+**Source.** Open-Meteo Historical Weather API, single point (Melbourne CBD; ERA5 snaps it to
+the nearest 0.25° grid cell at about −37.75, 145.0), hourly: temperature, humidity, cloud cover,
+wind speed and direction at 10 m and 100 m, gusts, and shortwave, direct and diffuse radiation.
+
+**Decisions.**
+- **`models=era5` explicitly.** Open-Meteo's default "best match" blends ERA5, ERA5-Land and ECMWF
+  IFS, and the blend can change over time. One model keeps the series consistent.
+- **`timeformat=unixtime`, `timezone=GMT`.** Unambiguous UTC timestamps. Open-Meteo's ISO format
+  applies one fixed offset to the whole response and ignores daylight saving, which is a trap if
+  you request Melbourne local time.
+- **Variable time conventions.** Temperature, wind and cloud are *instantaneous* at the label.
+  Radiation is the *mean over the preceding hour*: the value labelled 12:00 covers 11:00–12:00.
+  Both are therefore complete at their label, which we store as `valid_time`. Reading radiation as
+  covering the *following* hour would leak an hour of the future; a test pins this down.
+- **Rate limits.** API error payloads (for example "daily limit exceeded") are raised, not retried.
+  The free tier's limit is per IP address, so a shared cloud IP can be exhausted by other users.
+- **Cache validation.** Data is cached per calendar year. Loading checks every expected hour is
+  present, so a partial year cached under an earlier, shorter date range fails loudly.
+
+**Data check (1 Jan 2023 – 31 Oct 2026 plus a day of padding).** 33,648 of 33,648 hours, no
+missing values, nothing out of physical range.
+
+**Limitations.**
+- ERA5 is a **reanalysis published about 5 days after real time**. Here it stands in for real-time
+  observations a trader would have had. It is also a 25 km grid average, smoother than a station.
+- One point for the whole of Victoria. Wind farms are mostly in western Victoria, solar in the
+  north-west, and demand is concentrated in Melbourne.
+
+---
+
+## 4. Feature construction and leakage control
+
+**Framing.** Each row is a forecast origin `T`: the end of the latest completed 5-minute
+interval. The target is the RRP of the interval ending at `T + h`. One table per horizon (direct
+multi-horizon forecasting, rather than feeding forecasts back in recursively, which compounds
+errors).
+
+**What a feature may use at origin `T`.**
+
+| Family | Examples | Why it is allowed |
+|---|---|---|
+| Price/demand history | lags 0–48 intervals; 1 h, 4 h and 24 h rolling mean, std, min, max, median, share negative, count above $300; recent changes | Intervals ending at or before `T` are published |
+| Seasonal | price and demand at the target's time of day 1 day and 1 week earlier | `T + h − 24 h ≤ T` because `h ≤ 24 h` (enforced) |
+| Calendar (target time) | hour, minute of day, weekday, month, VIC public holiday | Known in advance |
+| Solar geometry (target time) | sun elevation at the target interval midpoint | Astronomy, known in advance; a leak-free stand-in for "how sunny could it be" |
+| Weather (pluggable) | latest temperature, wind (u/v at 10 m and 100 m), cloud, radiation, 3 h changes, 24 h max temperature, data age | Joined *as of* `valid_time + 1 h ≤ T` |
+
+**Key choices.**
+- **Regular 5-minute grid.** Features are computed after reindexing to a complete grid, so
+  `shift(k)` always means *k intervals earlier*. Gaps stay NaN; nothing is forward-filled.
+- **Calendar uses the target interval's start in NEM time,** so the interval 23:55–24:00 belongs
+  to the day it falls in. Victorian holidays include Melbourne Cup Day and the Friday before the
+  AFL Grand Final, which a national calendar would miss.
+- **Wind direction as u/v components.** Degrees are circular (359° is next to 1°), so raw degrees
+  mislead a model. Speed and direction become eastward and northward components.
+- **Pluggable weather.** Builders subclass `WeatherFeatureBuilder`, register by name, and are
+  selected in the config (`features.weather_builders`). They receive weather already tagged with
+  `available_at` and can attach it to origins only through `asof_join`. That is where wind-flow
+  and topography features will go.
+- **Targets stay raw.** Transforms (asinh) and spike labels are applied inside each training fold
+  later, so any fitted threshold only sees training data.
+- **Warm-up.** The first week is dropped because weekly lags are undefined.
+
+**How leakage is tested.**
+1. **Unit tests** pin each alignment: target = price at `T + h`; lag 0 = price at `T`; rolling
+   windows end at `T`; seasonal lags point at the target's time of day; radiation for the hour
+   ending 12:00 is first usable at 13:00 with a 1 h lag.
+2. **Future-perturbation test (end to end).** For sampled origins, replace every price, demand and
+   weather value that becomes known after `T` with random noise, rebuild all features, and require
+   the row at `T` to be identical. This covers every feature at once, including future ones.
+3. **Testing the test.** A deliberately leaky feature (next interval's price) and a weather build
+   that ignores the lag must both be caught.
+4. The same check passes on a month of **real** data with weather.
+
+**Size.** 401,184 origins × 74 features per horizon (15 from weather), built in about 1.5 s.
+
+---
+
 ## Planned extensions (after the core pipeline)
 
 1. **AEMO pre-dispatch benchmark.** Compare the models against AEMO's own published forecasts:
