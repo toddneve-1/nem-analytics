@@ -334,6 +334,56 @@ pinball loss, so it is a safe repair.
 `force_row_wise=True`; a test checks two fits with the same seed give identical predictions.
 LightGBM can still differ slightly across machines or thread counts.
 
+**Results** (`nemspike backtest --models lgbm_asinh,lgbm_none`; same 10 development folds and
+262,656 test origins per horizon as the baselines; seed 42).
+
+| Horizon | Model | MAE | RMSE | Mean pinball | Pinball q0.99 | q10–q90 coverage | Spike PR-AUC | Precision / recall at 0.5 |
+|---|---|---|---|---|---|---|---|---|
+| 30 min | persistence (best baseline) | **24.90** | **234.90** | **8.45** | **4.20** | 0.822 | 0.357 | 0.61 / 0.41 |
+| 30 min | lgbm_asinh | 25.47 | 311.07 | 8.55 | 4.92 | 0.787 | **0.594** | 0.73 / 0.45 |
+| 30 min | lgbm_none | 25.51 | 311.22 | 8.88 | 5.69 | 0.795 | 0.594 | 0.73 / 0.45 |
+| 4 h | best baseline (MAE: same time yesterday; pinball: climatology) | 65.48 | 326.32 | 19.86 | 10.16 | 0.793 | 0.057 | – |
+| 4 h | lgbm_asinh | **41.17** | **315.99** | **13.57** | **9.40** | 0.733 | **0.269** | 0.51 / 0.06 |
+| 4 h | lgbm_none | 41.17 | 315.88 | 13.74 | 9.70 | 0.730 | 0.269 | 0.51 / 0.06 |
+
+(Spike base rate 0.91 %. MAE, RMSE and pinball in $/MWh.)
+
+Per fold (`reports/metrics/dev/h*_by_fold.csv`):
+- **4 h:** LightGBM beats the best baseline on MAE and on mean pinball in **10 of 10** quarters.
+  Pooled: MAE −37 % against same time yesterday, mean pinball −32 % against climatology.
+- **30 min:** LightGBM beats persistence in **7 of 10** quarters on both MAE and pinball, but
+  loses on the pooled totals. Two volatile quarters (Q1 2024, Q2 2025) dominate: in Q2 2025 its
+  MAE is $58.8 against persistence's $43.8.
+- **Spikes:** best PR-AUC in every quarter at both horizons. At 30 min, 0.594 is about 65 times
+  the base rate (persistence 0.357); at 4 h, 0.269 is about 30 times the base rate (best
+  baseline 0.057).
+
+Interpretation and talking points:
+- **The model earns its keep at 4 hours,** exactly where the baselines fail. At 30 minutes the
+  latest price already carries most of the information, and persistence is a hard benchmark.
+  This is a common finding in short-term electricity price forecasting.
+- **The 30-minute loss on pooled MAE is concentrated in volatile quarters.** A plausible cause is
+  that the model predicts the *level* of the price; when prices jump, a median forecast that
+  partly reverts towards typical levels misses by more than "stay where you are". A natural next
+  experiment, run on development folds only: predict the *change* from the current price, or add
+  persistence as an explicit fallback.
+- **The 4-hour intervals are too narrow:** q10–q90 coverage 73 % against a nominal 80 %, and
+  under 70 % in the volatile 2024 quarters. Quantile models trained on a growing window
+  understate uncertainty when volatility rises. A candidate fix: conformal recalibration of the
+  intervals using recent residuals, also tested on development folds only.
+- **asinh against raw prices:** identical MAE, but asinh is better on every quantile loss,
+  especially the tail: q0.99 pinball 4.92 against 5.69 at 30 min (−14 %) and 9.40 against 9.70
+  at 4 h (−3 %). The transform helps where it should: the heavy tail. `lgbm_asinh` is the
+  default model.
+- **Identical spike metrics for both transforms are a sanity check, not a coincidence:** the
+  classifier does not use the price transform and is trained with the same seed, so it is the
+  same model.
+- **At 4 h the classifier ranks well (PR-AUC 0.27) but rarely reaches P ≥ 0.5** (recall 6 %).
+  Spikes 4 hours ahead are inherently uncertain, so the model's probabilities are honest and
+  low. A trader would act on a lower threshold, for example "P > 0.1", chosen from the cost of
+  false alarms against missed spikes. Precision and recall at 0.5 are therefore not the right
+  operating point, which is why PR-AUC is the headline metric.
+
 ---
 
 ## 7. Experiment tracking and versioned models (MLflow, local)
