@@ -4,12 +4,16 @@ For a price path ``p_t`` over ``N`` 5-minute intervals (``dt = 1/12`` h), choose
 ``c_t`` and discharge power ``d_t`` (MW, measured at the grid connection) and state of charge
 ``s_t`` (MWh, at the end of interval t) to
 
-    maximise   sum_t p_t * (d_t - c_t) * dt                     (market revenue, $)
+    maximise   sum_t [p_t * (d_t - c_t) - k * d_t] * dt          (revenue net of wear, $)
 
     subject to s_t = s_{t-1} + eta_c * c_t * dt - d_t * dt / eta_d   (energy balance)
                0 <= c_t, d_t <= P_max                             (power limits)
                S_min <= s_t <= S_max                              (state-of-charge limits)
                s_{N-1} = s_end                                    (terminal state of charge)
+
+``k`` is a degradation (wear) cost in $ per MWh discharged. It stops the optimiser from trading
+every small price wiggle that merely covers round-trip losses: a trade must now also pay for the
+battery life it uses.
 
 Round-trip efficiency ``eta`` is split equally between charging and discharging:
 ``eta_c = eta_d = sqrt(eta)``.
@@ -28,7 +32,7 @@ problem non-convex. ``optimise`` offers three methods:
   :mod:`nemspike.battery.dp`, which is exact on a fine state-of-charge grid and takes a few
   milliseconds. On 40 sampled real days the hybrid was within 0.02 % of the exact MILP revenue.
 
-Assumptions: price taker (dispatch does not move the price), no degradation cost, no auxiliary
+Assumptions: price taker (dispatch does not move the price), linear degradation cost, no auxiliary
 load, constant efficiency, no ramp limits, energy market only (no FCAS).
 """
 
@@ -61,6 +65,7 @@ class BatterySpec:
     soc_min_mwh: float
     soc_max_mwh: float
     soc_initial_mwh: float
+    degradation_cost_per_mwh: float = 0.0  # $ per MWh discharged to the grid
 
     @classmethod
     def from_config(cls, cfg: BatteryConfig) -> BatterySpec:
@@ -72,6 +77,7 @@ class BatterySpec:
             soc_min_mwh=cfg.soc_min_frac * e,
             soc_max_mwh=cfg.soc_max_frac * e,
             soc_initial_mwh=cfg.soc_initial_frac * e,
+            degradation_cost_per_mwh=cfg.degradation_cost_per_mwh,
         )
 
     @property
@@ -93,6 +99,10 @@ class Dispatch:
     def revenue(self, prices: np.ndarray) -> float:
         """Revenue ($) of this dispatch at the given prices."""
         return float(np.sum(np.asarray(prices) * self.net_mw * DT_HOURS))
+
+    def degradation_cost(self, spec: BatterySpec) -> float:
+        """Wear cost ($) of this dispatch: cost per MWh discharged times MWh discharged."""
+        return spec.degradation_cost_per_mwh * self.throughput_mwh()
 
     def throughput_mwh(self) -> float:
         """Energy discharged to the grid (MWh)."""
@@ -119,7 +129,7 @@ def _solve(
     # Objective (milp minimises): -revenue = sum p*dt*c - p*dt*d
     cost = np.zeros(nv)
     cost[ic : ic + n] = p * dt
-    cost[id_ : id_ + n] = -p * dt
+    cost[id_ : id_ + n] = (-p + spec.degradation_cost_per_mwh) * dt
 
     # Energy balance: s_t - s_{t-1} - eta*dt*c_t + dt/eta*d_t = (s0 if t == 0 else 0)
     eye = sparse.identity(n, format="csr")
@@ -227,7 +237,8 @@ def _remove_overlap(
     """Remove simultaneous charge/discharge without changing the state of charge.
 
     Reducing charge by x and discharge by eta^2 * x keeps ``eta * c - d / eta`` unchanged and
-    changes revenue by ``p * (1 - eta^2) * x * dt``, which is >= 0 when p >= 0. It is only applied
+    changes the objective by ``(p * (1 - eta^2) + k * eta^2) * x * dt``, which is >= 0 when
+    p >= 0 (k is the degradation cost, also >= 0). It is only applied
     where no negative-price interval overlaps (or after the MILP has forbidden those), so it never
     loses revenue.
     """

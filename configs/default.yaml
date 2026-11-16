@@ -75,6 +75,9 @@ battery:
   soc_initial_frac: 0.50
   rolling_resolve_minutes: 30
   lookahead_hours: 4
+  # Wear cost per MWh discharged (illustrative central value; results are also reported for
+  # $0 and $20 via `nemspike battery --degradation-costs 0,10,20`).
+  degradation_cost_per_mwh: 10.0
 
 tracking:
   mlflow_tracking_uri: sqlite:///mlflow.db

@@ -96,30 +96,37 @@ def naive_time_of_day(
     return pd.concat(out, ignore_index=True)
 
 
-def daily_results(dispatch: pd.DataFrame) -> pd.DataFrame:
-    """Revenue ($) and energy discharged (MWh) per strategy per day."""
+def daily_results(dispatch: pd.DataFrame, spec: BatterySpec) -> pd.DataFrame:
+    """Per strategy per day: market revenue, energy discharged, degradation cost and net revenue."""
     dt = 5 / 60
     d = dispatch.assign(
-        revenue=dispatch["rrp"] * (dispatch["discharge_mw"] - dispatch["charge_mw"]) * dt,
+        market_revenue=dispatch["rrp"] * (dispatch["discharge_mw"] - dispatch["charge_mw"]) * dt,
         discharged_mwh=dispatch["discharge_mw"] * dt,
     )
-    return d.groupby(["strategy", "nem_day"], as_index=False)[["revenue", "discharged_mwh"]].sum()
+    out = d.groupby(["strategy", "nem_day"], as_index=False)[
+        ["market_revenue", "discharged_mwh"]
+    ].sum()
+    out["degradation_cost"] = out["discharged_mwh"] * spec.degradation_cost_per_mwh
+    out["net_revenue"] = out["market_revenue"] - out["degradation_cost"]
+    return out
 
 
 def summarise_strategies(daily: pd.DataFrame, spec: BatterySpec) -> pd.DataFrame:
-    """Totals per strategy, with capture relative to perfect foresight on the same days."""
+    """Totals per strategy; capture is net revenue relative to perfect foresight, same days."""
     usable = spec.soc_max_mwh - spec.soc_min_mwh
     g = daily.groupby("strategy")
     out = pd.DataFrame(
         {
             "days": g["nem_day"].nunique(),
-            "revenue": g["revenue"].sum(),
-            "revenue_per_day": g["revenue"].mean(),
-            "share_of_days_negative": g["revenue"].apply(lambda s: float((s < 0).mean())),
+            "market_revenue": g["market_revenue"].sum(),
+            "degradation_cost": g["degradation_cost"].sum(),
+            "net_revenue": g["net_revenue"].sum(),
+            "net_per_day": g["net_revenue"].mean(),
+            "share_of_days_negative": g["net_revenue"].apply(lambda s: float((s < 0).mean())),
             "cycles_per_day": g["discharged_mwh"].mean() / usable,
         }
     )
-    out["revenue_per_mw_year"] = out["revenue_per_day"] * 365 / spec.power_mw
+    out["net_per_mw_year"] = out["net_per_day"] * 365 / spec.power_mw
     if "perfect_foresight" in out.index:
-        out["capture_vs_perfect"] = out["revenue"] / out.loc["perfect_foresight", "revenue"]
+        out["capture_vs_perfect"] = out["net_revenue"] / out.loc["perfect_foresight", "net_revenue"]
     return out

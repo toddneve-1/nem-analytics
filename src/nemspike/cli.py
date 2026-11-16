@@ -193,8 +193,13 @@ def train_final(
 def battery(
     config: Path = ConfigOpt,
     stage: str = typer.Option("dev", help="'dev' (development folds) or 'holdout' (final test)"),
+    degradation_costs: str = typer.Option(
+        "", help="Comma-separated $/MWh wear costs for a sensitivity run (default: config value)"
+    ),
 ) -> None:
     """Battery revenue for perfect foresight and the naive time-of-day strategy."""
+    from dataclasses import replace
+
     import pandas as pd
 
     from nemspike.battery.lp import BatterySpec
@@ -212,32 +217,42 @@ def battery(
         raise typer.BadParameter("stage must be 'dev' or 'holdout'")
     cfg = load_config(config)
     d = cfg.data
-    spec = BatterySpec.from_config(cfg.battery)
+    base_spec = BatterySpec.from_config(cfg.battery)
+    costs = (
+        [float(c) for c in degradation_costs.split(",")]
+        if degradation_costs
+        else [base_spec.degradation_cost_per_mwh]
+    )
     prices = load_price_demand(d.start, d.end, d.region, d.raw_dir)
     ends = prices["interval_end"]
     folds = walk_forward_folds(ends.min(), ends.max(), cfg.validation, stage)  # type: ignore[arg-type]
-
-    frames = []
-    for fold in folds:
-        # Intervals whose start lies in the fold's test period.
-        in_test = (ends > fold.test_start) & (ends <= fold.test_end)
-        train = prices[ends <= fold.test_start]
-        test = prices[in_test]
-        frames.append(perfect_foresight(test, spec).assign(fold_label=fold.label))
-        frames.append(naive_time_of_day(train, test, spec).assign(fold_label=fold.label))
-        typer.echo(f"{fold.label}: {test['interval_end'].size // 288} days")
-    dispatch = pd.concat(frames, ignore_index=True)
-
     out_dir = ARTEFACT_DIR / "battery" / stage
-    out_dir.mkdir(parents=True, exist_ok=True)
-    dispatch.to_parquet(out_dir / "dispatch.parquet", index=False)
-    daily = daily_results(dispatch)
-    summary = summarise_strategies(daily, spec)
     metric_dir = REPORT_DIR / "metrics" / stage
+    out_dir.mkdir(parents=True, exist_ok=True)
     metric_dir.mkdir(parents=True, exist_ok=True)
+
+    summaries = []
+    for cost in costs:
+        spec = replace(base_spec, degradation_cost_per_mwh=cost)
+        frames = []
+        for fold in folds:
+            # Intervals whose start lies in the fold's test period.
+            test = prices[(ends > fold.test_start) & (ends <= fold.test_end)]
+            train = prices[ends <= fold.test_start]
+            frames.append(perfect_foresight(test, spec).assign(fold_label=fold.label))
+            frames.append(naive_time_of_day(train, test, spec).assign(fold_label=fold.label))
+        dispatch = pd.concat(frames, ignore_index=True)
+        tag = f"deg{cost:g}"
+        dispatch.to_parquet(out_dir / f"dispatch_{tag}.parquet", index=False)
+        daily = daily_results(dispatch, spec)
+        daily.to_csv(metric_dir / f"battery_daily_{tag}.csv", index=False)
+        summaries.append(summarise_strategies(daily, spec).assign(degradation_cost_per_mwh=cost))
+        typer.echo(f"degradation cost ${cost:g}/MWh: done ({daily['nem_day'].nunique()} days)")
+
+    summary = pd.concat(summaries).set_index("degradation_cost_per_mwh", append=True)
+    summary = summary.reorder_levels(["degradation_cost_per_mwh", "strategy"]).sort_index()
     summary.to_csv(metric_dir / "battery_summary.csv")
-    daily.to_csv(metric_dir / "battery_daily.csv", index=False)
-    with pd.option_context("display.width", 200, "display.precision", 3):
+    with pd.option_context("display.width", 250, "display.precision", 3):
         typer.echo(summary.to_string())
 
 

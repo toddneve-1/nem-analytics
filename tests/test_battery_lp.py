@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import itertools
+
 import numpy as np
 import pytest
 
@@ -121,3 +123,58 @@ def test_random_prices_respect_all_constraints() -> None:
 def test_rejects_nan_prices() -> None:
     with pytest.raises(ValueError):
         optimise(np.array([1.0, np.nan]), SPEC)
+
+
+# --- degradation cost ------------------------------------------------------------------------
+
+
+def _with_cost(spec: BatterySpec, k: float) -> BatterySpec:
+    from dataclasses import replace
+
+    return replace(spec, degradation_cost_per_mwh=k)
+
+
+def test_degradation_cost_hand_calculation() -> None:
+    """$0 then $100 for an hour each, starting empty: 81 MWh delivered, wear $10/MWh -> $810."""
+    spec = _with_cost(BatterySpec(100.0, 200.0, 0.81, 0.0, 200.0, 0.0), 10.0)
+    prices = np.array([0.0] * 12 + [100.0] * 12)
+    d = optimise(prices, spec, soc_end=0.0)
+    assert d.revenue(prices) == pytest.approx(8100.0, rel=1e-6)
+    assert d.degradation_cost(spec) == pytest.approx(810.0, rel=1e-6)
+
+
+def test_no_trade_when_spread_does_not_cover_losses_plus_wear() -> None:
+    # 120 * 0.9 = 108 covers the $100 purchase on losses alone, but not with $10/MWh wear:
+    # per MWh bought, revenue 0.9 * 120 - 100 = 8 < wear 0.9 * 10 = 9.
+    prices = np.array([100.0] * 12 + [120.0] * 12)
+    free = optimise(prices, SPEC, soc_end=SPEC.soc_initial_mwh)
+    assert free.throughput_mwh() > 1.0
+    worn = optimise(prices, _with_cost(SPEC, 10.0), soc_end=SPEC.soc_initial_mwh)
+    assert worn.throughput_mwh() == pytest.approx(0, abs=1e-6)
+
+
+def test_higher_degradation_cost_never_increases_throughput() -> None:
+    rng = np.random.default_rng(3)
+    prices = rng.normal(60, 60, 288)
+    throughput = [
+        optimise(prices, _with_cost(SPEC, k), soc_end=SPEC.soc_initial_mwh).throughput_mwh()
+        for k in (0.0, 10.0, 20.0, 50.0)
+    ]
+    assert all(a >= b - 1e-6 for a, b in itertools.pairwise(throughput))
+    assert throughput[0] > throughput[-1]
+
+
+@pytest.mark.parametrize("seed", range(3))
+def test_hybrid_matches_milp_with_degradation_cost(seed: int) -> None:
+    rng = np.random.default_rng(seed)
+    prices = 80 * np.sin(np.arange(48) / 8) + rng.normal(0, 30, 48)
+    prices[10:22] -= 150
+    spec = _with_cost(SPEC, 10.0)
+
+    def net(method: str) -> float:
+        d = optimise(prices, spec, soc_end=SPEC.soc_initial_mwh, method=method)
+        return d.revenue(prices) - d.degradation_cost(spec)
+
+    exact, hybrid = net("milp"), net("hybrid")
+    assert hybrid <= exact + 1e-6
+    assert hybrid >= exact - 0.01 * abs(exact) - 1.0

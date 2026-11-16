@@ -35,9 +35,9 @@ def test_nem_day_and_slot_use_interval_start_in_aest(prices: pd.DataFrame) -> No
 def test_perfect_foresight_beats_naive_on_every_day(prices: pd.DataFrame) -> None:
     train, test = prices.iloc[: 5 * 288], prices.iloc[5 * 288 :]
     daily = daily_results(
-        pd.concat([perfect_foresight(test, SPEC), naive_time_of_day(train, test, SPEC)])
+        pd.concat([perfect_foresight(test, SPEC), naive_time_of_day(train, test, SPEC)]), SPEC
     )
-    wide = daily.pivot_table(index="nem_day", columns="strategy", values="revenue")
+    wide = daily.pivot_table(index="nem_day", columns="strategy", values="net_revenue")
     assert (wide["perfect_foresight"] >= wide["naive_time_of_day"] - 1e-6).all()
 
 
@@ -66,7 +66,7 @@ def test_time_of_day_schedule_charges_in_cheap_slots(prices: pd.DataFrame) -> No
 def test_summary_capture_is_relative_to_perfect_foresight(prices: pd.DataFrame) -> None:
     train, test = prices.iloc[: 5 * 288], prices.iloc[5 * 288 :]
     daily = daily_results(
-        pd.concat([perfect_foresight(test, SPEC), naive_time_of_day(train, test, SPEC)])
+        pd.concat([perfect_foresight(test, SPEC), naive_time_of_day(train, test, SPEC)]), SPEC
     )
     s = summarise_strategies(daily, SPEC)
     assert s.loc["perfect_foresight", "capture_vs_perfect"] == pytest.approx(1.0)

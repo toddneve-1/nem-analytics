@@ -63,6 +63,8 @@ def optimise_dp(
 
     # Revenue of moving k steps at price 1 $/MWh: charge pays k*g/eta, discharge earns -k*g*eta.
     unit_rev = np.where(offsets > 0, -offsets * g / eta, -offsets * g * eta)
+    # Degradation cost per move: cost per MWh discharged times MWh discharged (-k * g * eta).
+    wear = np.where(offsets < 0, spec.degradation_cost_per_mwh * (-offsets) * g * eta, 0.0)
     states = np.arange(n_states)
     nxt = states[:, None] + offsets[None, :]
     valid = (nxt >= 0) & (nxt < n_states)
@@ -70,7 +72,7 @@ def optimise_dp(
     policy = np.zeros((n, n_states), dtype=np.int16)
 
     for t in range(n - 1, -1, -1):
-        q = p[t] * unit_rev[None, :] + value[nxt_clipped]
+        q = p[t] * unit_rev[None, :] - wear[None, :] + value[nxt_clipped]
         q[~valid] = -np.inf
         best = np.argmax(q, axis=1)
         policy[t] = offsets[best]

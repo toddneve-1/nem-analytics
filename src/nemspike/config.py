@@ -133,6 +133,8 @@ class BatteryConfig(BaseModel):
     soc_initial_frac: float = Field(ge=0, le=1)
     rolling_resolve_minutes: int = Field(gt=0)
     lookahead_hours: float = Field(gt=0)
+    # Wear cost in $ per MWh discharged; the optimiser only trades if the spread covers it.
+    degradation_cost_per_mwh: float = Field(default=0.0, ge=0)
 
     @model_validator(mode="after")
     def _check_soc(self) -> BatteryConfig:
