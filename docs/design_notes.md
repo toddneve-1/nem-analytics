@@ -387,6 +387,33 @@ Interpretation and talking points:
   false alarms against missed spikes. Precision and recall at 0.5 are therefore not the right
   operating point, which is why PR-AUC is the headline metric.
 
+**All horizons, 30 min to 4 h in 30-minute steps** (`nemspike backtest --horizons
+60,90,120,150,180,210`). These intermediate horizons were run for Step 9, which needs a forecast
+price path over the battery's 4-hour planning window. Same folds, same settings.
+
+| Horizon | LightGBM MAE | Best baseline MAE | LightGBM mean pinball | Best baseline pinball | q10–q90 coverage | LightGBM PR-AUC | Best baseline PR-AUC | Quarters LightGBM wins on MAE |
+|---|---|---|---|---|---|---|---|---|
+| 30 min | 25.47 | 24.90 (persistence) | 8.55 | 8.45 | 0.787 | 0.594 | 0.357 | 7 / 10 |
+| 1 h | 29.78 | 35.15 (persistence) | 10.22 | 11.53 | 0.769 | 0.398 | 0.232 | 10 / 10 |
+| 1.5 h | 32.70 | 43.95 (persistence) | 11.31 | 13.95 | 0.759 | 0.377 | 0.135 | 10 / 10 |
+| 2 h | 35.06 | 51.84 (persistence) | 11.91 | 16.02 | 0.748 | 0.337 | 0.087 | 10 / 10 |
+| 2.5 h | 37.05 | 57.97 (persistence) | 12.47 | 17.33 | 0.739 | 0.318 | 0.064 | 10 / 10 |
+| 3 h | 38.59 | 63.60 (persistence) | 12.86 | 18.53 | 0.737 | 0.274 | 0.057 | 10 / 10 |
+| 3.5 h | 40.02 | 65.48 (same time yesterday) | 13.20 | 19.45 | 0.736 | 0.287 | 0.057 | 10 / 10 |
+| 4 h | 41.17 | 65.48 (same time yesterday) | 13.57 | 19.86 | 0.733 | 0.269 | 0.057 | 10 / 10 |
+
+(Best baseline per column; pinball baseline is the best of the four at that horizon.)
+
+Talking points:
+- **The crossover is between 30 and 60 minutes.** Persistence's error grows fast with horizon
+  (from $25 to $64 by 3 hours); the model's grows slowly ($25 to $41 at 4 hours). From 1 hour on,
+  the model wins every quarter at every horizon.
+- **Errors and coverage degrade smoothly with horizon**, as they should; a jump would suggest a
+  bug. Coverage drifts from 79 % to 73 %, so interval recalibration matters more at longer
+  horizons.
+- PR-AUC falls from 0.59 to about 0.27, with a small, non-monotone bump at 3.5 h (0.287 against
+  0.274 at 3 h): within the noise of a metric driven by about 2,400 spike intervals.
+
 ---
 
 ## 7. Experiment tracking and versioned models (MLflow, local)

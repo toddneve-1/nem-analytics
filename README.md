@@ -35,6 +35,12 @@ development; Jul–Oct 2026 is held back as an untouched final test.
 - **Weak spot:** the 4-hour 80 % ranges contain the actual price only 73 % of the time; they are
   too narrow, especially in volatile periods.
 
+Across every horizon from 30 minutes to 4 hours (in 30-minute steps), the model's advantage grows
+with the horizon: from 60 minutes onwards it beats the best baseline in all 10 quarters at every
+horizon, with typical error 15 % lower at 1 hour and 37 % lower at 4 hours.
+
+![Forecast skill by horizon: LightGBM against the best baseline](reports/figures/skill_by_horizon.png)
+
 ### A hypothetical battery
 
 | Parameter | Value |
