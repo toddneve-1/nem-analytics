@@ -38,6 +38,63 @@ Each entry is written to be explainable in an interview: *what* was decided, *wh
 
 ---
 
+## 2. Time handling and the AEMO price and demand loader
+
+**Source.** AEMO's monthly *Aggregated price and demand* CSVs
+(`PRICE_AND_DEMAND_{YYYYMM}_VIC1.csv`), not NEMOSIS or raw NEMWEB `DISPATCHPRICE` tables.
+
+**Why this source.** The aggregated files give exactly what is needed (5-minute RRP and regional
+total demand) in one small file per month (~0.4 MB). NEMWEB's raw MMS tables are much larger and
+need more parsing for the same two columns. NEMOSIS remains an option if later features need
+other tables (for example interconnector flows or pre-dispatch).
+
+**Timestamps.**
+- `SETTLEMENTDATE` labels the **end** of each 5-minute interval in NEM time. `2024/01/01 00:05`
+  is the interval 00:00–00:05. We keep both `interval_start` and `interval_end`.
+- NEM time is fixed AEST (UTC+10) with **no daylight saving**. We localise with the fixed-offset
+  zone `Etc/GMT-10` (the sign is inverted in POSIX `Etc` names), never `Australia/Melbourne`.
+  Using Melbourne civil time would shift every summer interval by an hour, which a test documents.
+- Everything is stored in **UTC**. Open-Meteo returns UTC, so the weather join cannot be off by
+  an hour, and there are no ambiguous or missing hours at daylight-saving changes.
+- A "NEM day" is the 288 intervals ending 00:05 to 24:00 AEST. Month files follow the same rule.
+
+**Data quality policy: detect and report, never silently fix.**
+- Unparseable values, rows outside the file's month, and duplicated intervals **raise** an error.
+- Missing intervals are **reported** against the full expected 5-minute grid, not filled. Any gap
+  handling will be an explicit, documented choice in feature construction.
+- Prices are stored exactly as published. **No clipping**: negative prices (to the −$1,000 floor)
+  and prices near the market price cap are genuine outcomes, and the spike tail is the target.
+
+**Caching.** One parquet file per month under `data/raw/aemo/VIC1/`, so downloads are resumable
+and re-runs are free. Downloads retry with exponential backoff on network errors and 5xx
+responses.
+
+**What the data looks like (VIC1, 1 Jan 2023 – 31 Oct 2026, from `nemspike fetch-prices`).**
+
+| | Value |
+|---|---|
+| Intervals | 403,200 of 403,200 expected (no gaps, no duplicates) |
+| Price range | −$1,000.00 to $19,069.69/MWh |
+| Negative-price intervals | 88,873 (22 %) |
+| Intervals > $300/MWh | 3,165 (0.8 %) |
+| Intervals > $1,000/MWh | 313 |
+| 99th percentile (full period) | $299.50/MWh |
+
+Talking points:
+- About one in five intervals is negative, driven by midday rooftop and utility solar. A model,
+  or a target transform, that assumes positive prices would fail immediately.
+- The full-period 99th percentile ($299.50) is almost exactly the fixed $300 threshold, so the two
+  spike definitions agree on this period. Spikes are rare (under 1 %), so the spike classifier is
+  an imbalanced problem: PR-AUC is more informative than ROC-AUC or accuracy.
+- The tail is extreme: the maximum is about 350 times the median.
+
+**Licence.** AEMO material is used under AEMO's Copyright Permissions Notice. I could not read the
+notice directly (AEMO's website blocks automated clients), so the README carries attribution and a
+link to it. **To do before making the repo public:** read the notice in a browser and confirm the
+wording.
+
+---
+
 ## Limitations (maintained throughout)
 
 - Energy arbitrage only: no FCAS co-optimisation.
