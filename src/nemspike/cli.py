@@ -270,6 +270,122 @@ def battery(
         typer.echo(summary.to_string())
 
 
+@app.command("battery-forecast")
+def battery_forecast(
+    config: Path = ConfigOpt,
+    price_methods: str = typer.Option(
+        "learned,median,linear", help="Planning prices: learned (method c), median, linear"
+    ),
+    model: str = typer.Option("lgbm_asinh", help="Forecast model whose saved predictions to use"),
+    track: bool = typer.Option(True, help="Log the run to MLflow"),
+) -> None:
+    """Forecast-driven rolling-horizon battery on development folds, against the benchmarks.
+
+    Folds 1 onwards only: the learned planning price is fitted on earlier folds' out-of-sample
+    forecasts, so fold 0 has no history. Benchmarks are evaluated on the same days.
+    """
+    import time
+
+    import pandas as pd
+
+    from nemspike.battery.expected_price import QUANTILE_COLUMNS, LearnedBands, expected_price
+    from nemspike.battery.lp import BatterySpec
+    from nemspike.battery.rolling import DEFAULT_HORIZONS, rolling_dispatch
+    from nemspike.battery.strategies import (
+        daily_results,
+        naive_time_of_day,
+        perfect_foresight,
+        summarise_strategies,
+    )
+    from nemspike.battery.water_value import quarterly_storage_values, water_value_curve
+    from nemspike.data.aemo import load_price_demand
+    from nemspike.evaluation.splits import walk_forward_folds
+    from nemspike.pipeline import ARTEFACT_DIR, REPORT_DIR
+    from nemspike.timeutils import nem_day_start_utc
+
+    cfg = load_config(config)
+    d = cfg.data
+    spec = BatterySpec.from_config(cfg.battery)
+    methods = [m.strip() for m in price_methods.split(",") if m.strip()]
+    prices = load_price_demand(d.start, d.end, d.region, d.raw_dir)
+    ends = prices["interval_end"]
+    folds = walk_forward_folds(ends.min(), ends.max(), cfg.validation, "dev")  # type: ignore[arg-type]
+    dev_end = (
+        nem_day_start_utc(cfg.validation.holdout_start) if cfg.validation.holdout_start else None
+    )
+
+    # Storage values (water value inputs) from data before the holdout only, cached.
+    cache = (
+        ARTEFACT_DIR / "battery" / f"storage_values_deg{spec.degradation_cost_per_mwh:g}.parquet"
+    )
+    if cache.exists():
+        values = pd.read_parquet(cache)
+    else:
+        typer.echo("computing storage values quarter by quarter (cached afterwards)...")
+        dev_prices = prices if dev_end is None else prices[ends <= dev_end]
+        values = quarterly_storage_values(dev_prices, spec)
+        cache.parent.mkdir(parents=True, exist_ok=True)
+        values.to_parquet(cache, index=False)
+
+    preds = {
+        h: pd.read_parquet(ARTEFACT_DIR / "backtest" / "dev" / f"h{h}" / f"{model}.parquet")
+        for h in DEFAULT_HORIZONS
+    }
+    frames = []
+    for fold in folds[1:]:
+        t0 = time.time()
+        test = prices[(ends > fold.test_start) & (ends <= fold.test_end)]
+        train = prices[ends <= fold.test_start]
+        curve = water_value_curve(values, fold.test_start)
+        frames.append(perfect_foresight(test, spec, "continuous").assign(fold_label=fold.label))
+        frames.append(
+            naive_time_of_day(train, test, spec, "continuous").assign(fold_label=fold.label)
+        )
+        for method in methods:
+            cols = {}
+            for h, pr in preds.items():
+                cur = pr[pr["fold"] == fold.number].set_index("origin")
+                bands = None
+                if method == "learned":
+                    hist = pr[pr["fold"] < fold.number]
+                    bands = LearnedBands.fit(
+                        hist[QUANTILE_COLUMNS].to_numpy(), hist["y"].to_numpy()
+                    )
+                cols[h] = pd.Series(expected_price(cur, method, bands), index=cur.index)  # type: ignore[arg-type]
+            plan = pd.DataFrame(cols)
+            frames.append(
+                rolling_dispatch(test, plan, curve, spec, f"forecast_{method}").assign(
+                    fold_label=fold.label
+                )
+            )
+        typer.echo(f"{fold.label}: done in {time.time() - t0:.0f}s")
+
+    dispatch = pd.concat(frames, ignore_index=True)
+    out_dir = ARTEFACT_DIR / "battery" / "dev"
+    metric_dir = REPORT_DIR / "metrics" / "dev"
+    out_dir.mkdir(parents=True, exist_ok=True)
+    tag = f"forecast_deg{spec.degradation_cost_per_mwh:g}"
+    dispatch.to_parquet(out_dir / f"dispatch_{tag}.parquet", index=False)
+    daily = daily_results(dispatch, spec)
+    daily_csv = metric_dir / f"battery_daily_{tag}.csv"
+    daily.to_csv(daily_csv, index=False)
+    summary = summarise_strategies(daily, spec)
+    summary.to_csv(metric_dir / f"battery_summary_{tag}.csv")
+    by_fold = daily.merge(
+        dispatch[["nem_day", "fold_label"]].drop_duplicates(), on="nem_day"
+    ).pivot_table(index="fold_label", columns="strategy", values="net_revenue", aggfunc="sum")
+    by_fold.to_csv(metric_dir / f"battery_by_fold_{tag}.csv")
+    with pd.option_context("display.width", 250, "display.precision", 3):
+        typer.echo(summary.to_string())
+    if track:
+        from nemspike.tracking.mlflow_utils import log_battery
+
+        run_id = log_battery(
+            cfg, config, "dev", spec.degradation_cost_per_mwh, summary, daily_csv, "forecast"
+        )
+        typer.echo(f"logged to MLflow run {run_id}")
+
+
 @app.command()
 def figures(config: Path = ConfigOpt) -> None:
     """Write the README figures (data overview, forecast skill by horizon) to reports/figures."""
