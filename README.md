@@ -48,10 +48,13 @@ horizon, with typical error 15 % lower at 1 hour and 37 % lower at 4 hours.
 | Power / energy | 100 MW / 200 MWh (2-hour battery) |
 | Round-trip efficiency | 90 % |
 | State-of-charge range | 10 %–90 % (160 MWh usable) |
-| Daily reset | Starts and ends each day at 50 % |
-| Degradation (wear) cost | $10 per MWh discharged (results also run at $0 and $20) |
+| Operation | Continuous: charge carried overnight; 50 % at the start and end of each quarter |
+| Degradation (wear) cost | $40 per MWh discharged (sensitivity $0–60) |
 
 Key assumptions (amongst others):
+- **Wear cost:** cost of replacing worn capacity ÷ lifetime energy delivered, using illustrative
+  figures ($200,000 per MWh of cells ÷ (6,000 cycles × 80 % usable depth) ≈ $40/MWh). Results are
+  also shown from $0 to $60.
 - **Price taker:** the battery's own dispatch does not move the price.
 - **Energy arbitrage only:** no frequency control (FCAS) revenue, which in practice is a major
   income stream for batteries.
@@ -60,22 +63,33 @@ Key assumptions (amongst others):
 - **No simultaneous charging and discharging.** Without this rule, an optimiser exploits negative
   prices by doing both at once to "burn" energy through losses, which a real battery cannot do.
 
-Outcomes over the 912 development days (Jan 2024 – Jun 2026), at $10/MWh wear cost:
+Outcomes over the 912 development days (Jan 2024 – Jun 2026), at $40/MWh wear cost:
 
 | Strategy | Net revenue | Per MW per year | Share of perfect foresight | Cycles per day |
 |---|---|---|---|---|
-| Perfect foresight (knows each day's prices in advance) | $47.0 m | $188,000 | 100 % | 3.2 |
-| Naive (same daily schedule every day, from past averages) | $18.8 m | $75,000 | **40 %** | 2.4 |
+| Perfect foresight (knows every price in advance) | $38.2 m | $153,000 | 100 % | 1.7 |
+| Naive (same daily schedule every day, from past averages) | $12.9 m | $52,000 | **34 %** | 1.4 |
 
-- **Battery value is concentrated in a few days.** The 5 best days earn 26 % of perfect-foresight
-  revenue, and the best 10 % of days earn 43 %. Missing spike days costs more than months of
-  ordinary trading.
-- **A fixed daily routine captures about 40 % of the theoretical maximum** and loses money on 15 %
-  of days.
-- **Wear cost matters:** without it the optimiser cycles 4.9 times a day; at $10/MWh this falls to
-  3.2, and at $20/MWh to 2.5.
+How the wear cost changes the picture (net revenue, continuous operation):
+
+| Wear cost ($/MWh) | 0 | 10 | 20 | **40** | 60 |
+|---|---|---|---|---|---|
+| Perfect foresight | $53.5 m | $47.9 m | $44.0 m | **$38.2 m** | $33.9 m |
+| Naive share of perfect foresight | 41 % | 39 % | 37 % | **34 %** | 23 % |
+| Perfect-foresight cycles per day | 4.8 | 3.1 | 2.4 | **1.7** | 1.3 |
+
+- **Battery value is concentrated in a few days.** At $40/MWh, the 5 best days earn 32 % of
+  perfect-foresight revenue, and the best 10 % of days earn half of it. Missing spike days costs
+  more than months of ordinary trading.
+- **A fixed daily routine captures about a third of the theoretical maximum** and loses money on
+  30 % of days: it cannot skip days when the price spread is too small to pay for wear.
+- **Realistic wear costs bring cycling into a realistic range:** perfect foresight cycles 4.8 times
+  a day with no wear cost but 1.7 times at $40/MWh.
+- **Running continuously is worth 1.5–4.7 % more than resetting to 50 % every midnight,** and more
+  as wear costs rise, because holding energy overnight for a better opportunity becomes relatively
+  more valuable.
 - **Next:** a battery driven by the forecasts above, re-planning every 30 minutes, to measure how
-  much of the gap between 40 % and 100 % the forecasts can close.
+  much of the gap between 34 % and 100 % the forecasts can close.
 
 More detail will be added as the analysis progresses. Design decisions, all results and their
 limitations are recorded in [`docs/design_notes.md`](docs/design_notes.md).
@@ -137,7 +151,7 @@ uv run nemspike backtest --models baselines,lgbm_asinh,lgbm_none
 ```
 
 ```bash
-uv run nemspike battery --degradation-costs 0,10,20
+uv run nemspike battery --degradation-costs 0,10,20,40,60
 ```
 
 ```bash

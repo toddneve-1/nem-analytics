@@ -68,7 +68,7 @@ are separate markets and arrangements. This project models energy arbitrage only
 | Horizons | 30 min, 4 h | Plus a 30-minute grid to 4 h for dispatch |
 | Quantiles | 0.1, 0.5, 0.9, 0.99 | |
 | Spike | > $300/MWh (fixed) | Percentile option, fitted on training fold only |
-| Battery | 100 MW / 200 MWh, 90 % round trip, SoC 10–90 % | Wear cost $10/MWh discharged added in Step 8 ($0 and $20 as sensitivities) |
+| Battery | 100 MW / 200 MWh, 90 % round trip, SoC 10–90 % | Continuous operation; wear cost $40/MWh discharged (Step 8; $0–60 sensitivity) |
 | Seed | 42 | |
 
 ---
@@ -471,19 +471,20 @@ tests use one thread.
 
 ## 8. Battery optimiser and benchmark strategies
 
-**Formulation (per NEM day, 288 five-minute intervals, dt = 1/12 h).**
+**Formulation (over a planning period of N five-minute intervals, dt = 1/12 h).**
 
-    maximise   Σ_t p_t (d_t − c_t) dt                             (revenue at the actual RRP)
+    maximise   Σ_t [p_t (d_t − c_t) − k d_t] dt                   (revenue net of wear)
     subject to s_t = s_{t−1} + η c_t dt − d_t dt / η                (energy balance)
                0 ≤ c_t, d_t ≤ 100 MW                              (power)
                20 ≤ s_t ≤ 180 MWh                                 (10–90 % of 200 MWh)
-               s_0 = s_288 = 100 MWh                              (start and end each day at 50 %)
+               s_0 = s_N = 100 MWh                                (start and end the period at 50 %)
 
-with η = √0.9 on each leg (90 % round trip). Battery parameters come from the config.
+with η = √0.9 on each leg (90 % round trip) and a wear cost k per MWh discharged (added later; see
+below). Battery parameters come from the config.
 
-**Daily decomposition.** Each NEM day starts and ends at 50 % state of charge, so days are
-independent and strategies are compared on identical terms. Cost: energy cannot be carried
-overnight between days. This restriction applies equally to all strategies.
+**Planning period.** First implemented per NEM day (N = 288: every day starts and ends at 50 %,
+so days are independent). Now continuous by default: N is a whole test quarter (about 26,000
+intervals), with 50 % only at the quarter's start and end. See "Continuous operation" below.
 
 **The negative-price problem.** The plain LP, at negative prices with a full battery, charges and
 discharges *at the same time*: the round-trip losses turn the battery into a load that is paid to
@@ -561,6 +562,8 @@ losses *and* the battery life it uses. Real wear costs depend on cell chemistry,
 and replacement prices, so instead of claiming one "true" value, $10/MWh is used as an
 illustrative central case with $0 and $20 as sensitivities (`nemspike battery
 --degradation-costs 0,10,20`). Capture is measured on **net** revenue (market revenue minus wear).
+These results use the **daily** rule set; they are superseded as the headline by the continuous,
+$40/MWh results in the next section, and are kept for comparison.
 
 | Wear cost | Strategy | Market revenue | Wear cost | Net revenue | Net $/MW-year | Capture | Loss-making days | Cycles/day |
 |---|---|---|---|---|---|---|---|---|
@@ -581,6 +584,57 @@ The $0 row reproduces the earlier run exactly. Observations:
 - Even at $20, perfect foresight cycles about 2.5 times a day, still high: with perfect
   knowledge of 5-minute prices there are many profitable intraday spreads. Forecast-driven
   strategies will cycle less, because uncertain spreads are not worth trading.
+
+**Continuous operation and the wear-cost sweep (current headline).**
+
+*Continuous instead of daily.* The daily reset was chosen for a clean comparison and per-day
+results, not for computation: a whole quarter (about 26,000 intervals) solves in about 5 seconds.
+What makes comparisons fair is that every strategy follows the *same* rule set and differs only
+in information. Continuous operation is the more realistic rule set (no operator empties to 50 %
+every midnight), so all strategies now run continuously: state of charge is carried across
+midnights and fixed at 50 % only at the start and end of each test quarter. The naive schedule
+returns to 50 % each night anyway, so it is valid under both rule sets and unchanged. The daily
+rule set is kept as a comparison (`--mode daily`).
+
+*Wear cost of $40/MWh.* Derived as cost of replacing worn capacity ÷ lifetime energy delivered,
+with illustrative assumptions rather than market data: $200,000 per MWh of cells ÷ (6,000 cycles ×
+80 % usable depth) ≈ $40/MWh. Plausible inputs span roughly $20–60/MWh, so the sweep covers $0–60.
+
+| Wear cost | Strategy | Net revenue | Net $/MW-year | Capture vs perfect | Loss-making days | Cycles/day |
+|---|---|---|---|---|---|---|
+| $0 | Perfect foresight | $53.47 m | $213,995 | 100 % | 0.0 % | 4.80 |
+| $0 | Naive time-of-day | $22.04 m | $88,224 | 41.2 % | 7.0 % | 3.37 |
+| $10 | Perfect foresight | $47.90 m | $191,724 | 100 % | 0.0 % | 3.10 |
+| $10 | Naive time-of-day | $18.75 m | $75,037 | 39.1 % | 14.7 % | 2.42 |
+| $20 | Perfect foresight | $43.99 m | $176,052 | 100 % | 0.1 % | 2.37 |
+| $20 | Naive time-of-day | $16.28 m | $65,153 | 37.0 % | 21.3 % | 1.79 |
+| **$40** | **Perfect foresight** | **$38.21 m** | **$152,938** | **100 %** | **0.2 %** | **1.68** |
+| **$40** | **Naive time-of-day** | **$12.94 m** | **$51,774** | **33.9 %** | **29.7 %** | **1.42** |
+| $60 | Perfect foresight | $33.91 m | $135,717 | 100 % | 0.9 % | 1.31 |
+| $60 | Naive time-of-day | $7.90 m | $31,621 | 23.3 % | 42.0 % | 1.29 |
+
+(912 development days, Jan 2024 – Jun 2026, continuous rule set. Net = market revenue minus wear
+cost. `nemspike battery --mode continuous --degradation-costs 0,10,20,40,60`.)
+
+Checks on all continuous dispatch, every wear cost: state of charge within 20–180 MWh, power ≤
+100 MW, no simultaneous charge and discharge, every quarter ends at 100 MWh, energy balance exact to
+about 1e-13 MWh. At $40/MWh the whole-quarter LP never uses the negative-price loophole (burning
+energy no longer pays), so the LP solution is provably optimal.
+
+Talking points:
+- **Continuous beats daily by 1.5–4.7 %, and the gain grows with wear cost** (+1.5 % at $0,
+  +3.6 % at $40, +4.7 % at $60). With costly cycles, the optimiser does fewer, larger trades, so
+  the option to hold energy overnight for a better opportunity is worth relatively more.
+- **At $40/MWh perfect foresight cycles 1.7 times a day**, in the range of real operation, against
+  4.8 with no wear cost. Net revenue falls 29 % from $0 to $40: the trades removed were the thin
+  ones.
+- **The naive schedule suffers most from wear cost** (capture 41 % at $0 → 34 % at $40 → 23 % at
+  $60, loss-making on 30 % of days at $40). A fixed schedule cannot skip days when the spread is
+  too small to pay for wear; this is where forecasts should add the most value.
+- **Value is even more concentrated with realistic wear cost:** at $40 the 5 best days earn 31.7 %
+  of perfect-foresight net revenue and the best 10 % of days 50.1 %.
+- A few perfect-foresight days are slightly negative under continuous operation (0.2 % at $40).
+  That is expected, not an error: the battery may buy on one day to sell on the next.
 
 **Assumptions and limitations.** Price taker (no market impact), energy only (no FCAS), a
 linear wear cost (real degradation depends on depth of cycle, temperature and age), constant efficiency, no auxiliary load, no
@@ -611,7 +665,8 @@ ramp limits, no network constraints or marginal loss factors, settlement at the 
 - Price taker: no market impact from the battery's own dispatch.
 - Simplified battery: constant efficiency, linear wear cost only (real degradation depends on depth
   of cycle, temperature and age), no auxiliary load, no ramp limits.
-- Battery resets to 50 % state of charge every midnight, so energy is never carried between days.
+- Battery runs continuously within each test quarter but starts and ends each quarter at 50 %; the
+  wear cost ($40/MWh) is an illustrative assumption, not a calibrated figure.
 - No network constraints, marginal loss factors or intra-regional congestion.
 - Weather from a single Melbourne point, not a demand- or generation-weighted average.
 - Weather is ERA5 reanalysis (published about 5 days late, 25 km grid) standing in for real-time
