@@ -17,6 +17,10 @@ its duals are exact for that choice. So:
 
 from __future__ import annotations
 
+import hashlib
+import json
+from dataclasses import asdict
+
 import holidays
 import numpy as np
 import pandas as pd
@@ -121,6 +125,23 @@ def quarterly_storage_values(prices: pd.DataFrame, spec: BatterySpec) -> pd.Data
             "weekend": day_type(p["interval_end"]),
         }
     )
+
+
+def storage_values_key(prices: pd.DataFrame, spec: BatterySpec) -> str:
+    """Short fingerprint of everything :func:`quarterly_storage_values` depends on.
+
+    Used to name the cache file, so cached values are never reused for a different battery
+    (efficiency, limits, power, wear cost) or a different price history (period or revisions).
+    """
+    ends = prices["interval_end"]
+    payload = {
+        "spec": asdict(spec),
+        "first": str(ends.min()),
+        "last": str(ends.max()),
+        "n": len(prices),
+        "rrp": int(pd.util.hash_pandas_object(prices["rrp"], index=False).sum()),
+    }
+    return hashlib.sha256(json.dumps(payload, sort_keys=True).encode()).hexdigest()[:12]
 
 
 def water_value_curve(values: pd.DataFrame, before: pd.Timestamp) -> pd.Series:

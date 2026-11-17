@@ -85,3 +85,21 @@ def test_curve_uses_only_history_before_cutoff() -> None:
     curve = water_value_curve(values, cutoff)
     assert len(curve) == 2 * 288
     assert (curve == 10.0).all()
+
+
+def test_cache_key_changes_with_battery_or_price_history() -> None:
+    """Cached storage values must not be reused for a different battery or different prices."""
+    import pandas as pd
+
+    from nemspike.battery.water_value import storage_values_key
+
+    ends = pd.Series(pd.date_range("2024-01-01 14:05", periods=288, freq="5min", tz="UTC"))
+    prices = pd.DataFrame({"interval_end": ends, "rrp": 50.0})
+    key = storage_values_key(prices, SPEC)
+    assert key == storage_values_key(prices.copy(), SPEC)
+    assert key != storage_values_key(prices, replace(SPEC, round_trip_efficiency=0.85))
+    assert key != storage_values_key(prices, replace(SPEC, degradation_cost_per_mwh=10.0))
+    assert key != storage_values_key(prices.iloc[:-1], SPEC)
+    revised = prices.copy()
+    revised.loc[100, "rrp"] = 51.0
+    assert key != storage_values_key(revised, SPEC)

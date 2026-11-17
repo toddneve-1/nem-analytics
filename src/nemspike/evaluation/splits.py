@@ -73,7 +73,9 @@ def walk_forward_folds(
         data_start.tz_convert(NEM_TZ) + pd.DateOffset(months=cfg.initial_train_months)
     ).tz_convert("UTC")
     folds: list[Fold] = []
-    while test_start < dev_end:
+    # A fold must contain an origin with a known target. The last origin never has one, so a
+    # fold starting exactly there (data ending on a fold boundary, no holdout) would be empty.
+    while test_start < min(dev_end, last_origin):
         test_end = (
             test_start.tz_convert(NEM_TZ) + pd.DateOffset(months=cfg.test_fold_months)
         ).tz_convert("UTC")

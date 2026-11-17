@@ -17,7 +17,7 @@ Strategies:
   forecasts and no information from the test period. Under continuous rules the schedule is a
   repeating cycle with a freely chosen overnight level; under daily rules it returns to 50 % at
   midnight.
-* Forecast-driven rolling-horizon dispatch is added in Step 9.
+* Forecast-driven rolling-horizon dispatch: see :mod:`nemspike.battery.rolling`.
 
 Revenue is always settled at the actual RRP: ``sum(price * (discharge - charge) * 5/60)``.
 """
@@ -161,8 +161,67 @@ def daily_results(dispatch: pd.DataFrame, spec: BatterySpec) -> pd.DataFrame:
     return out
 
 
-def summarise_strategies(daily: pd.DataFrame, spec: BatterySpec) -> pd.DataFrame:
-    """Totals per strategy; capture is net revenue relative to perfect foresight, same days."""
+def paired_bootstrap(
+    daily: pd.DataFrame,
+    strategy: str,
+    baseline: str,
+    n_boot: int = 10_000,
+    block_days: int = 7,
+    seed: int = 0,
+) -> dict[str, float]:
+    """Uncertainty of ``strategy``'s total net revenue minus ``baseline``'s, over the same days.
+
+    Battery revenue is concentrated in a handful of days, so a difference in totals can rest on
+    one or two of them. This resamples the *paired* daily differences (same day, both strategies)
+    with a circular block bootstrap: blocks of ``block_days`` consecutive days are drawn with
+    replacement until the period is refilled. Blocks, rather than single days, because a battery
+    that carries charge overnight moves revenue between neighbouring days and price regimes
+    persist for days.
+
+    Returns the observed difference, a 95 % percentile interval and the share of resamples in
+    which the difference is zero or negative. This describes sampling uncertainty over days like
+    those observed; it cannot account for kinds of day that never occurred in the period.
+    """
+    wide = daily.pivot(index="nem_day", columns="strategy", values="net_revenue").sort_index()
+    missing = {strategy, baseline} - set(wide.columns)
+    if missing:
+        raise ValueError(f"no daily results for {sorted(missing)}")
+    diff = (wide[strategy] - wide[baseline]).to_numpy()
+    if np.isnan(diff).any():
+        raise ValueError("strategies must be evaluated on exactly the same days")
+    n = len(diff)
+    if not 1 <= block_days <= n:
+        raise ValueError("block_days must be between 1 and the number of days")
+    rng = np.random.default_rng(seed)
+    n_blocks = -(-n // block_days)
+    starts = rng.integers(0, n, size=(n_boot, n_blocks))
+    idx = (starts[:, :, None] + np.arange(block_days)[None, None, :]) % n
+    totals = diff[idx.reshape(n_boot, -1)[:, :n]].sum(axis=1)
+    low, high = np.percentile(totals, [2.5, 97.5])
+    return {
+        "difference": float(diff.sum()),
+        "ci_low": float(low),
+        "ci_high": float(high),
+        "share_not_positive": float(np.mean(totals <= 0)),
+    }
+
+
+def summarise_strategies(
+    daily: pd.DataFrame,
+    spec: BatterySpec,
+    baseline: str | None = None,
+    n_boot: int = 10_000,
+    block_days: int = 7,
+    seed: int = 0,
+) -> pd.DataFrame:
+    """Totals per strategy; capture is net revenue relative to perfect foresight, same days.
+
+    With ``baseline`` (a strategy name), each other row also gets ``net_vs_<baseline>``: its net
+    revenue minus the baseline's, with a bootstrap 95 % interval (``_ci_low``, ``_ci_high``) and
+    the share of resamples where it is not ahead (``_share_not_positive``); see
+    :func:`paired_bootstrap`. A headline difference is then never reported without its
+    uncertainty.
+    """
     usable = spec.soc_max_mwh - spec.soc_min_mwh
     g = daily.groupby("strategy")
     out = pd.DataFrame(
@@ -179,4 +238,14 @@ def summarise_strategies(daily: pd.DataFrame, spec: BatterySpec) -> pd.DataFrame
     out["net_per_mw_year"] = out["net_per_day"] * 365 / spec.power_mw
     if "perfect_foresight" in out.index:
         out["capture_vs_perfect"] = out["net_revenue"] / out.loc["perfect_foresight", "net_revenue"]
+    if baseline is not None:
+        rows = {
+            name: paired_bootstrap(daily, name, baseline, n_boot, block_days, seed)
+            for name in out.index
+            if name != baseline
+        }
+        prefix = f"net_vs_{baseline}"
+        boot = pd.DataFrame(rows).T.add_prefix(f"{prefix}_")
+        boot = boot.rename(columns={f"{prefix}_difference": prefix})
+        out = out.join(boot)  # the baseline's own row stays NaN
     return out

@@ -163,6 +163,13 @@ uv run nemspike fetch-weather
 uv run nemspike backtest --models baselines,lgbm_asinh,lgbm_none
 ```
 
+The forecast-driven battery needs forecasts at every dispatch horizon (30 minutes to 4 hours in
+30-minute steps, `forecast.dispatch_horizons_minutes` in the config):
+
+```bash
+uv run nemspike backtest --models baselines,lgbm_asinh --horizons dispatch
+```
+
 ```bash
 uv run nemspike battery --degradation-costs 0,10,20,40,60
 ```
@@ -193,9 +200,16 @@ See `docs/design_notes.md` for design decisions and limitations.
 
 - `reports/metrics/<stage>/`: metric tables for every model (pooled and per fold), as CSV.
 - `results/predictions/dev/`: compact out-of-sample predictions of the default model
-  (`lgbm_asinh`) for every development-fold origin, so plots and the battery evaluation can be
-  reproduced without re-training (about 30 minutes). Regenerate everything with
-  `uv run nemspike backtest --models baselines,lgbm_asinh,lgbm_none`.
+  (`lgbm_asinh`) for every development-fold origin, written by
+  `uv run nemspike snapshot-predictions`. Only the 30-minute and 4-hour horizons are committed so
+  far, so forecast metrics at those horizons can be recomputed without re-training.
+- `uv run nemspike battery-forecast` reads the full predictions under `artefacts/` if present and
+  otherwise these snapshots, for all eight dispatch horizons. Until the six intermediate
+  snapshots are committed it therefore needs the two `backtest` commands above; it also always
+  needs the AEMO prices (`fetch-prices`), which are not committed.
+- `battery_summary_forecast_deg40.csv` gives each strategy's net revenue minus the naive
+  schedule's with a bootstrap 95 % interval (`net_vs_naive_time_of_day*` columns): for the
+  headline forecast-driven battery, +$0.35 m with an interval of −$3.1 m to +$2.8 m.
 
 ## Data attribution and licences
 

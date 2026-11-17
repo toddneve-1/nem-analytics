@@ -44,6 +44,16 @@ def test_folds_for_project_period_are_quarterly_after_one_year() -> None:
         assert a.test_end == b.test_start  # contiguous, no overlap
 
 
+def test_no_empty_fold_when_data_ends_on_a_fold_boundary() -> None:
+    """The last origin (00:00 AEST on 1 Apr) starts a new month but has no target to score."""
+    folds = walk_forward_folds(
+        pd.Timestamp("2024-01-08 14:05", tz=UTC),
+        pd.Timestamp("2024-03-31 14:00", tz=UTC),
+        ValidationConfig(initial_train_months=1, test_fold_months=1),
+    )
+    assert [f.label for f in folds] == ["2024-02 to 2024-02", "2024-03 to 2024-03"]
+
+
 def test_holdout_is_excluded_from_dev_folds_and_scored_separately() -> None:
     from datetime import date
 

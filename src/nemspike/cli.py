@@ -7,13 +7,36 @@ from pathlib import Path
 
 import typer
 
-from nemspike.config import load_config
+from nemspike.config import Config, load_config
 
 app = typer.Typer(
     help="NEM VIC1 price spike forecasting and battery evaluation.", no_args_is_help=True
 )
 
 ConfigOpt = typer.Option(Path("configs/default.yaml"), "--config", "-c", help="YAML config file")
+
+
+def _horizons(value: str, cfg: Config) -> list[int]:
+    """Horizons from a CLI option: '' (headline horizons), 'dispatch', 'all', or a list."""
+    f = cfg.forecast
+    named = {
+        "": f.horizons_minutes,
+        "dispatch": f.dispatch_horizons_minutes,
+        "all": f.all_horizons_minutes,
+    }
+    if value.strip() in named:
+        return list(named[value.strip()])
+    try:
+        return [int(h) for h in value.split(",")]
+    except ValueError as err:
+        raise typer.BadParameter(
+            "horizons must be comma-separated minutes, 'dispatch' or 'all'"
+        ) from err
+
+
+def _models(value: str, cfg: Config) -> list[str]:
+    """Model names from a CLI option; empty means the config's default model."""
+    return [m.strip() for m in value.split(",") if m.strip()] or [cfg.forecast.default_model]
 
 
 @app.callback()
@@ -82,7 +105,11 @@ def backtest(
     config: Path = ConfigOpt,
     models: str = typer.Option("baselines", help="Comma-separated model names or 'baselines'"),
     stage: str = typer.Option("dev", help="'dev' (development folds) or 'holdout' (final test)"),
-    horizons: str = typer.Option("", help="Comma-separated horizons in minutes (default: config)"),
+    horizons: str = typer.Option(
+        "",
+        help="Comma-separated minutes, 'dispatch' (forecast.dispatch_horizons_minutes, needed by "
+        "battery-forecast) or 'all'. Default: forecast.horizons_minutes",
+    ),
     track: bool = typer.Option(True, help="Log each model's run to MLflow"),
 ) -> None:
     """Walk-forward backtest. Saves predictions per model, then a summary of all saved models."""
@@ -99,7 +126,7 @@ def backtest(
         typer.echo("Scoring the FINAL HOLDOUT. Do not tune anything on these results.")
     cfg = load_config(config)
     names = expand([m.strip() for m in models.split(",") if m.strip()])
-    hs = [int(h) for h in horizons.split(",")] if horizons else cfg.forecast.horizons_minutes
+    hs = _horizons(horizons, cfg)
     prices, weather = load_inputs(cfg)
 
     for h in hs:
@@ -144,19 +171,21 @@ def backtest(
 
 @app.command("snapshot-predictions")
 def snapshot_predictions(
-    models: str = typer.Option("lgbm_asinh", help="Comma-separated model names"),
+    config: Path = ConfigOpt,
+    models: str = typer.Option("", help="Comma-separated model names (default: config's model)"),
     stage: str = typer.Option("dev"),
 ) -> None:
     """Write compact copies of saved backtest predictions to results/predictions (committed)."""
     import pandas as pd
 
     from nemspike.evaluation.backtest import compact_predictions
-    from nemspike.pipeline import ARTEFACT_DIR
+    from nemspike.pipeline import ARTEFACT_DIR, SNAPSHOT_DIR
 
-    out_dir = Path("results") / "predictions" / stage
+    names = _models(models, load_config(config))
+    out_dir = SNAPSHOT_DIR / stage
     out_dir.mkdir(parents=True, exist_ok=True)
     for h_dir in sorted((ARTEFACT_DIR / "backtest" / stage).glob("h*")):
-        for name in [m.strip() for m in models.split(",") if m.strip()]:
+        for name in names:
             src = h_dir / f"{name}.parquet"
             if not src.exists():
                 continue
@@ -170,8 +199,10 @@ def snapshot_predictions(
 @app.command("train-final")
 def train_final(
     config: Path = ConfigOpt,
-    models: str = typer.Option("lgbm_asinh", help="Comma-separated model names"),
-    horizons: str = typer.Option("", help="Comma-separated horizons in minutes (default: config)"),
+    models: str = typer.Option("", help="Comma-separated model names (default: config's model)"),
+    horizons: str = typer.Option(
+        "", help="Comma-separated minutes, 'dispatch' or 'all' (default: forecast.horizons_minutes)"
+    ),
     cutoff: str = typer.Option("holdout", help="'holdout' (train before holdout) or 'end'"),
 ) -> None:
     """Fit final models and register each as a new version in the MLflow Model Registry."""
@@ -179,8 +210,8 @@ def train_final(
     from nemspike.tracking.registry import train_and_register
 
     cfg = load_config(config)
-    hs = [int(h) for h in horizons.split(",")] if horizons else cfg.forecast.horizons_minutes
-    for name in expand([m.strip() for m in models.split(",") if m.strip()]):
+    hs = _horizons(horizons, cfg)
+    for name in expand(_models(models, cfg)):
         for h in hs:
             v = train_and_register(cfg, name, h, cutoff)
             typer.echo(
@@ -276,13 +307,20 @@ def battery_forecast(
     price_methods: str = typer.Option(
         "learned,median,linear", help="Planning prices: learned (method c), median, linear"
     ),
-    model: str = typer.Option("lgbm_asinh", help="Forecast model whose saved predictions to use"),
+    model: str = typer.Option(
+        "", help="Forecast model whose saved predictions to use (default: config's model)"
+    ),
     track: bool = typer.Option(True, help="Log the run to MLflow"),
 ) -> None:
     """Forecast-driven rolling-horizon battery on development folds, against the benchmarks.
 
     Folds 1 onwards only: the learned planning price is fitted on earlier folds' out-of-sample
     forecasts, so fold 0 has no history. Benchmarks are evaluated on the same days.
+
+    The planning grid, re-plan interval and look-ahead come from the config
+    (``forecast.dispatch_horizons_minutes``, ``battery.rolling_resolve_minutes``,
+    ``battery.lookahead_hours``). Needs saved predictions for every dispatch horizon:
+    ``nemspike backtest --models <model> --horizons dispatch``.
     """
     import time
 
@@ -290,22 +328,29 @@ def battery_forecast(
 
     from nemspike.battery.expected_price import QUANTILE_COLUMNS, LearnedBands, expected_price
     from nemspike.battery.lp import BatterySpec
-    from nemspike.battery.rolling import DEFAULT_HORIZONS, rolling_dispatch
+    from nemspike.battery.rolling import rolling_dispatch
     from nemspike.battery.strategies import (
         daily_results,
         naive_time_of_day,
         perfect_foresight,
         summarise_strategies,
     )
-    from nemspike.battery.water_value import quarterly_storage_values, water_value_curve
+    from nemspike.battery.water_value import (
+        quarterly_storage_values,
+        storage_values_key,
+        water_value_curve,
+    )
     from nemspike.data.aemo import load_price_demand
     from nemspike.evaluation.splits import walk_forward_folds
-    from nemspike.pipeline import ARTEFACT_DIR, REPORT_DIR
+    from nemspike.pipeline import ARTEFACT_DIR, REPORT_DIR, load_predictions
     from nemspike.timeutils import nem_day_start_utc
 
     cfg = load_config(config)
     d = cfg.data
     spec = BatterySpec.from_config(cfg.battery)
+    model = model or cfg.forecast.default_model
+    horizons = tuple(cfg.forecast.dispatch_horizons_minutes)
+    resolve, lookahead = cfg.battery.resolve_intervals, cfg.battery.lookahead_intervals
     methods = [m.strip() for m in price_methods.split(",") if m.strip()]
     prices = load_price_demand(d.start, d.end, d.region, d.raw_dir)
     ends = prices["interval_end"]
@@ -314,23 +359,21 @@ def battery_forecast(
         nem_day_start_utc(cfg.validation.holdout_start) if cfg.validation.holdout_start else None
     )
 
-    # Storage values (water value inputs) from data before the holdout only, cached.
+    # Storage values (water value inputs) from data before the holdout only. The cache file is
+    # named by a fingerprint of the battery and the price history, so it cannot go stale.
+    dev_prices = prices if dev_end is None else prices[ends <= dev_end]
     cache = (
-        ARTEFACT_DIR / "battery" / f"storage_values_deg{spec.degradation_cost_per_mwh:g}.parquet"
+        ARTEFACT_DIR / "battery" / f"storage_values_{storage_values_key(dev_prices, spec)}.parquet"
     )
     if cache.exists():
         values = pd.read_parquet(cache)
     else:
         typer.echo("computing storage values quarter by quarter (cached afterwards)...")
-        dev_prices = prices if dev_end is None else prices[ends <= dev_end]
         values = quarterly_storage_values(dev_prices, spec)
         cache.parent.mkdir(parents=True, exist_ok=True)
         values.to_parquet(cache, index=False)
 
-    preds = {
-        h: pd.read_parquet(ARTEFACT_DIR / "backtest" / "dev" / f"h{h}" / f"{model}.parquet")
-        for h in DEFAULT_HORIZONS
-    }
+    preds = {h: load_predictions("dev", h, model) for h in horizons}
     frames = []
     for fold in folds[1:]:
         t0 = time.time()
@@ -354,9 +397,9 @@ def battery_forecast(
                 cols[h] = pd.Series(expected_price(cur, method, bands), index=cur.index)  # type: ignore[arg-type]
             plan = pd.DataFrame(cols)
             frames.append(
-                rolling_dispatch(test, plan, curve, spec, f"forecast_{method}").assign(
-                    fold_label=fold.label
-                )
+                rolling_dispatch(
+                    test, plan, curve, spec, f"forecast_{method}", resolve, lookahead, horizons
+                ).assign(fold_label=fold.label)
             )
         typer.echo(f"{fold.label}: done in {time.time() - t0:.0f}s")
 
@@ -369,7 +412,9 @@ def battery_forecast(
     daily = daily_results(dispatch, spec)
     daily_csv = metric_dir / f"battery_daily_{tag}.csv"
     daily.to_csv(daily_csv, index=False)
-    summary = summarise_strategies(daily, spec)
+    # Differences from the naive schedule come with a bootstrap interval: revenue is concentrated
+    # in a few days, so a difference in totals means little without one.
+    summary = summarise_strategies(daily, spec, baseline="naive_time_of_day", seed=cfg.seed)
     summary.to_csv(metric_dir / f"battery_summary_{tag}.csv")
     by_fold = daily.merge(
         dispatch[["nem_day", "fold_label"]].drop_duplicates(), on="nem_day"

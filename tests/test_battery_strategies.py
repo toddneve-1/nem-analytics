@@ -9,6 +9,7 @@ from nemspike.battery.strategies import (
     add_nem_day,
     daily_results,
     naive_time_of_day,
+    paired_bootstrap,
     perfect_foresight,
     summarise_strategies,
     time_of_day_schedule,
@@ -107,3 +108,67 @@ def test_naive_continuous_schedule_carries_charge_between_days(prices: pd.DataFr
     # Every day ends at the same level (a repeating cycle), so the quarter gains no net energy.
     np.testing.assert_allclose(ends, ends[0], atol=1e-9)
     assert np.isfinite(starts).all()
+
+
+# --- bootstrap of differences between strategies -----------------------------------------------
+
+
+def _daily(a: np.ndarray, b: np.ndarray) -> pd.DataFrame:
+    days = pd.date_range("2024-01-01", periods=len(a)).date
+    return pd.concat(
+        [
+            pd.DataFrame({"strategy": name, "nem_day": days, "net_revenue": v})
+            for name, v in (("a", a), ("b", b))
+        ],
+        ignore_index=True,
+    )
+
+
+def test_bootstrap_interval_excludes_zero_for_a_consistent_edge() -> None:
+    rng = np.random.default_rng(0)
+    b = rng.normal(1000, 300, 200)
+    out = paired_bootstrap(_daily(b + rng.normal(50, 20, 200), b), "a", "b", n_boot=2000)
+    assert out["ci_low"] > 0 and out["share_not_positive"] == 0.0
+    assert out["ci_low"] < out["difference"] < out["ci_high"]
+
+
+def test_bootstrap_interval_spans_zero_when_one_day_decides_the_total() -> None:
+    """The case this exists for: ahead on almost every day, but one day carries the total."""
+    a, b = np.full(200, 1100.0), np.full(200, 1000.0)
+    a[57] -= 15_000.0  # one extreme day outweighs 199 small wins
+    out = paired_bootstrap(_daily(a, b), "a", "b", n_boot=2000)
+    assert out["difference"] == pytest.approx(199 * 100 - 14_900)
+    assert out["ci_low"] < 0 < out["ci_high"]
+    assert 0.05 < out["share_not_positive"] < 0.95
+
+
+def test_bootstrap_is_reproducible_and_paired() -> None:
+    rng = np.random.default_rng(1)
+    b = rng.normal(1000, 5000, 120)  # wild days common to both strategies
+    daily = _daily(b + 10.0, b)
+    one, two = (paired_bootstrap(daily, "a", "b", n_boot=500, seed=7) for _ in range(2))
+    assert one == two
+    # Pairing removes the shared day-to-day swings: the difference is exactly 10 a day.
+    assert one["ci_low"] == pytest.approx(1200.0) and one["ci_high"] == pytest.approx(1200.0)
+
+
+def test_bootstrap_requires_the_same_days_for_both_strategies() -> None:
+    daily = _daily(np.ones(30), np.ones(30))
+    with pytest.raises(ValueError, match="same days"):
+        paired_bootstrap(daily.iloc[:-1], "a", "b", n_boot=10)
+    with pytest.raises(ValueError, match="no daily results"):
+        paired_bootstrap(daily, "a", "missing", n_boot=10)
+
+
+def test_summary_reports_difference_from_baseline_with_interval(prices: pd.DataFrame) -> None:
+    train, test = prices.iloc[: 5 * 288], prices.iloc[5 * 288 :]
+    daily = daily_results(
+        pd.concat([perfect_foresight(test, SPEC), naive_time_of_day(train, test, SPEC)]), SPEC
+    )
+    plain = summarise_strategies(daily, SPEC)
+    s = summarise_strategies(daily, SPEC, baseline="naive_time_of_day", n_boot=200, block_days=2)
+    pd.testing.assert_frame_equal(s[plain.columns], plain)  # existing columns are unchanged
+    pf, naive = s.loc["perfect_foresight"], s.loc["naive_time_of_day"]
+    assert pf["net_vs_naive_time_of_day"] == pytest.approx(pf["net_revenue"] - naive["net_revenue"])
+    assert pf["net_vs_naive_time_of_day_ci_low"] <= pf["net_vs_naive_time_of_day_ci_high"]
+    assert np.isnan(naive["net_vs_naive_time_of_day"])  # the baseline has no difference to itself

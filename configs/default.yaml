@@ -6,7 +6,6 @@ data:
   start: "2023-01-01"        # inclusive, NEM time (AEST, UTC+10)
   end: "2026-10-31"          # inclusive, NEM time
   raw_dir: data/raw
-  processed_dir: data/processed
   weather:
     # Melbourne CBD (Olympic Park area). Single point; regional coverage is a known limitation.
     latitude: -37.8136
@@ -22,7 +21,8 @@ forecast:
   # Horizons used to build the price path for rolling-horizon dispatch (30-min grid to 4 h).
   dispatch_horizons_minutes: [30, 60, 90, 120, 150, 180, 210, 240]
   quantiles: [0.1, 0.5, 0.9, 0.99]
-  target_transform: asinh   # one of: none, asinh
+  # Default model's target transform (lgbm_<transform>): one of none, asinh.
+  target_transform: asinh
   asinh_scale: 100.0        # $/MWh; asinh(price / scale)
 
 features:

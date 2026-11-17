@@ -51,13 +51,18 @@ are separate markets and arrangements. This project models energy arbitrage only
   working directory, which catches packaging mistakes early.
 - A single validated config means every result can be tied to exact settings plus a seed. A bad
   value (for example a 7-minute horizon in a 5-minute market, or an initial state of charge
-  outside its limits) fails at load time rather than silently changing the experiment.
+  outside its limits) fails at load time rather than silently changing the experiment. Unknown
+  keys are rejected too (`extra="forbid"`): otherwise a misspelt optional key would quietly fall
+  back to its default. Every key is read by the code; the dispatch grid, re-plan interval and
+  look-ahead of the forecast-driven battery come from the config, not from defaults in the code.
 - Raw data, MLflow runs and model artefacts are git-ignored: they are reproducible from code,
   and committing data invites stale or hand-edited inputs.
 
 **CI.** GitHub Actions runs `ruff check`, `ruff format --check` and `pytest` on Python 3.11 and
 3.12. Tests use small synthetic fixtures; any test that touches the network is marked
-`network` and skipped in CI, so CI is deterministic and does not depend on AEMO's servers.
+`network` and skipped in CI, so CI is deterministic and does not depend on AEMO's servers. An
+end-to-end test runs `backtest`, `battery` and `battery-forecast` through the command line on
+three months of synthetic data, so the README's command sequence and the fold wiring are tested.
 
 **Default experiment settings (agreed up front).**
 
@@ -784,6 +789,24 @@ Capture by quarter (net revenue as % of perfect foresight):
 
 Checks: physically valid dispatch for all planning prices (energy balance exact, limits respected,
 no simultaneous charge and discharge, every quarter ends at 50 %).
+
+**How certain is the difference from naive?** Revenue is concentrated in a few days, so the
+difference in totals is reported with a paired block bootstrap
+(`nemspike.battery.strategies.paired_bootstrap`): daily differences from naive on the same days,
+resampled in blocks of 7 consecutive days (10,000 resamples, seed 42; blocks because the battery
+carries charge overnight and price regimes last for days). Saved in
+`battery_summary_forecast_deg40.csv`.
+
+| Strategy | Net revenue minus naive | 95 % interval | Resamples not ahead of naive |
+|---|---|---|---|
+| Forecast, median price | +$0.55 m | −$2.9 m to +$2.8 m | 32 % |
+| Forecast, linear expected price (a) | +$0.55 m | −$3.0 m to +$3.0 m | 33 % |
+| Forecast, learned expected price (c) | +$0.35 m | −$3.1 m to +$2.8 m | 37 % |
+
+Every interval spans zero by a wide margin: **on total revenue, 821 days do not show that the
+forecast-driven battery beats the naive schedule.** Block lengths of 1 and 14 days give almost the
+same intervals. The interval only reflects days like those observed; it says nothing about kinds
+of day that did not occur.
 
 **Findings.**
 - **The forecasts beat naive in 8 of 9 quarters, often by 10–17 percentage points, and halve the

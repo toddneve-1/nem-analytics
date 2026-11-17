@@ -11,22 +11,31 @@ from pathlib import Path
 from typing import Literal
 
 import yaml
-from pydantic import BaseModel, Field, field_validator, model_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 
-class WeatherConfig(BaseModel):
+class _Strict(BaseModel):
+    """Base for every config section: an unknown key is an error, not silently ignored.
+
+    Without this, a misspelt optional key (for example ``degradation_cost_per_mhw``) would fall
+    back to its default and quietly change the experiment.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+
+class WeatherConfig(_Strict):
     latitude: float = Field(ge=-90, le=90)
     longitude: float = Field(ge=-180, le=180)
     model: str = "era5"
     availability_lag_hours: int = Field(ge=0)
 
 
-class DataConfig(BaseModel):
+class DataConfig(_Strict):
     region: str
     start: date
     end: date
     raw_dir: Path
-    processed_dir: Path
     weather: WeatherConfig
 
     @model_validator(mode="after")
@@ -36,10 +45,14 @@ class DataConfig(BaseModel):
         return self
 
 
-class ForecastConfig(BaseModel):
+class ForecastConfig(_Strict):
     horizons_minutes: list[int]
+    # Horizons whose forecasts form the price path for rolling-horizon dispatch. Must be an even
+    # grid (step, 2 x step, ...): each forecast prices one block of the planning window.
     dispatch_horizons_minutes: list[int]
     quantiles: list[float]
+    # Target transform of the default LightGBM model (``lgbm_<transform>``), which is the model
+    # used by ``battery-forecast``, ``train-final`` and ``snapshot-predictions`` unless overridden.
     target_transform: Literal["none", "asinh"]
     asinh_scale: float = Field(gt=0)
 
@@ -49,6 +62,22 @@ class ForecastConfig(BaseModel):
         if any(h <= 0 or h % 5 for h in v):
             raise ValueError("horizons must be positive multiples of 5 minutes")
         return sorted(v)
+
+    @field_validator("dispatch_horizons_minutes")
+    @classmethod
+    def _even_grid(cls, v: list[int]) -> list[int]:
+        if not v or v != [v[0] * (i + 1) for i in range(len(v))]:
+            raise ValueError("dispatch horizons must form an even grid: step, 2 x step, ...")
+        return v
+
+    @property
+    def all_horizons_minutes(self) -> list[int]:
+        """Every horizon the pipeline needs: the headline horizons plus the dispatch grid."""
+        return sorted(set(self.horizons_minutes) | set(self.dispatch_horizons_minutes))
+
+    @property
+    def default_model(self) -> str:
+        return f"lgbm_{self.target_transform}"
 
     @field_validator("quantiles")
     @classmethod
@@ -60,7 +89,7 @@ class ForecastConfig(BaseModel):
         return sorted(v)
 
 
-class FeaturesConfig(BaseModel):
+class FeaturesConfig(_Strict):
     price_lags_intervals: list[int]
     rolling_windows_minutes: list[int]
     count_above_thresholds: list[float]
@@ -81,7 +110,7 @@ class FeaturesConfig(BaseModel):
         return sorted(set(v))
 
 
-class SpikeConfig(BaseModel):
+class SpikeConfig(_Strict):
     method: Literal["fixed", "percentile"]
     fixed_threshold: float
     percentile: float = Field(gt=0, lt=100)
@@ -90,7 +119,7 @@ class SpikeConfig(BaseModel):
     decision_probability: float = Field(default=0.5, gt=0, lt=1)
 
 
-class ValidationConfig(BaseModel):
+class ValidationConfig(_Strict):
     initial_train_months: int = Field(ge=1)
     test_fold_months: int = Field(ge=1)
     # Start (NEM date) of the final holdout. Development folds stop here; the holdout is scored
@@ -98,7 +127,7 @@ class ValidationConfig(BaseModel):
     holdout_start: date | None = None
 
 
-class ModelConfig(BaseModel):
+class ModelConfig(_Strict):
     """LightGBM settings shared by the quantile models and the spike classifier."""
 
     train_stride_minutes: int = Field(ge=5)
@@ -124,7 +153,7 @@ class ModelConfig(BaseModel):
         return v
 
 
-class BatteryConfig(BaseModel):
+class BatteryConfig(_Strict):
     power_mw: float = Field(gt=0)
     energy_mwh: float = Field(gt=0)
     round_trip_efficiency: float = Field(gt=0, le=1)
@@ -145,13 +174,33 @@ class BatteryConfig(BaseModel):
             raise ValueError("require soc_min_frac <= soc_initial_frac <= soc_max_frac")
         return self
 
+    @model_validator(mode="after")
+    def _check_rolling(self) -> BatteryConfig:
+        if self.rolling_resolve_minutes % 5:
+            raise ValueError("rolling_resolve_minutes must be a multiple of 5")
+        if abs(self.lookahead_hours * 12 - round(self.lookahead_hours * 12)) > 1e-9:
+            raise ValueError("lookahead_hours must be a whole number of 5-minute intervals")
+        if self.rolling_resolve_minutes > self.lookahead_hours * 60:
+            raise ValueError("rolling_resolve_minutes must not exceed the look-ahead window")
+        return self
 
-class TrackingConfig(BaseModel):
+    @property
+    def resolve_intervals(self) -> int:
+        """5-minute intervals executed between re-plans."""
+        return self.rolling_resolve_minutes // 5
+
+    @property
+    def lookahead_intervals(self) -> int:
+        """5-minute intervals in each planning window."""
+        return round(self.lookahead_hours * 12)
+
+
+class TrackingConfig(_Strict):
     mlflow_tracking_uri: str
     experiment_name: str
 
 
-class Config(BaseModel):
+class Config(_Strict):
     seed: int
     data: DataConfig
     forecast: ForecastConfig
@@ -161,6 +210,16 @@ class Config(BaseModel):
     model: ModelConfig
     battery: BatteryConfig
     tracking: TrackingConfig
+
+    @model_validator(mode="after")
+    def _check_dispatch_window(self) -> Config:
+        longest = max(self.forecast.dispatch_horizons_minutes)
+        if self.battery.lookahead_hours * 60 > longest:
+            raise ValueError(
+                "battery.lookahead_hours extends beyond the longest dispatch horizon "
+                f"({longest} minutes): there would be no forecast for the end of each plan"
+            )
+        return self
 
 
 def load_config(path: str | Path = "configs/default.yaml") -> Config:
