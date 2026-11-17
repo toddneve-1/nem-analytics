@@ -178,3 +178,52 @@ def test_hybrid_matches_milp_with_degradation_cost(seed: int) -> None:
     exact, hybrid = net("milp"), net("hybrid")
     assert hybrid <= exact + 1e-6
     assert hybrid >= exact - 0.01 * abs(exact) - 1.0
+
+
+# --- cyclic (repeating) schedules ------------------------------------------------------------
+
+
+def _typical_day() -> np.ndarray:
+    """Shape like the real VIC1 average day: morning shoulder, solar trough, evening peak, night."""
+    hours = np.arange(288) / 12
+    p = np.full(288, 81.0)  # overnight
+    p[(hours >= 6) & (hours < 7)] = 88.0  # morning shoulder
+    p[(hours >= 11) & (hours < 14)] = 1.0  # midday solar trough
+    p[(hours >= 17) & (hours < 19)] = 180.0  # evening peak
+    return p
+
+
+def _net(d, prices: np.ndarray, spec: BatterySpec) -> float:
+    return d.revenue(prices) - d.degradation_cost(spec)
+
+
+def test_cyclic_schedule_wraps_around_and_respects_limits() -> None:
+    spec = _with_cost(SPEC, 40.0)
+    prices = _typical_day()
+    d = optimise(prices, spec, cyclic=True)
+    eta = spec.eta_one_way
+    soc_prev = np.concatenate([[d.soc_mwh[-1]], d.soc_mwh[:-1]])  # wrap: day starts where it ended
+    expected = soc_prev + eta * d.charge_mw * DT_HOURS - d.discharge_mw * DT_HOURS / eta
+    np.testing.assert_allclose(d.soc_mwh, expected, atol=1e-6)
+    assert d.soc_mwh.min() >= spec.soc_min_mwh - TOL and d.soc_mwh.max() <= spec.soc_max_mwh + TOL
+
+
+def test_cyclic_schedule_is_never_worse_and_skips_forced_night_refill() -> None:
+    spec = _with_cost(SPEC, 40.0)
+    prices = _typical_day()
+    forced = optimise(prices, spec, soc_start=100.0, soc_end=100.0)
+    cyclic = optimise(prices, spec, cyclic=True)
+    assert _net(cyclic, prices, spec) >= _net(forced, prices, spec) - 1e-6
+    night = (np.arange(288) / 12) >= 19
+    # Buying at $81 to sell at $88 loses money after losses and wear; the free schedule avoids it.
+    assert cyclic.charge_mw[night].sum() == pytest.approx(0, abs=1e-6)
+    assert _net(cyclic, prices, spec) > _net(forced, prices, spec)
+
+
+def test_cyclic_schedule_never_overlaps_at_negative_prices() -> None:
+    prices = _typical_day()
+    prices[(np.arange(288) / 12 >= 10) & (np.arange(288) / 12 < 15)] = -300.0
+    d = optimise(prices, SPEC, cyclic=True)  # no wear cost: the LP is tempted to burn energy
+    assert not _overlaps(d)
+    lp = optimise(prices, SPEC, cyclic=True, method="lp")
+    assert lp.revenue(prices) >= d.revenue(prices) - 1e-6

@@ -115,8 +115,13 @@ def _solve(
     s0: float,
     soc_end: float | None,
     binary_idx: np.ndarray,
+    cyclic: bool = False,
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
-    """One LP / MILP solve. Intervals in ``binary_idx`` may not charge and discharge together."""
+    """One LP / MILP solve. Intervals in ``binary_idx`` may not charge and discharge together.
+
+    With ``cyclic``, the first interval starts from the last interval's state of charge (a
+    repeating schedule); ``s0`` and ``soc_end`` are then ignored and the level is chosen freely.
+    """
     n = len(p)
     nb = len(binary_idx)
     eta = spec.eta_one_way
@@ -133,13 +138,16 @@ def _solve(
 
     # Energy balance: s_t - s_{t-1} - eta*dt*c_t + dt/eta*d_t = (s0 if t == 0 else 0)
     eye = sparse.identity(n, format="csr")
-    shift = sparse.diags([np.ones(n - 1)], [-1], shape=(n, n), format="csr")
+    shift = sparse.diags([np.ones(n - 1)], [-1], shape=(n, n), format="lil")
+    if cyclic:
+        shift[0, n - 1] = 1.0  # s_0 follows s_{N-1}: the schedule wraps around
+    shift = shift.tocsr()
     blocks = [-eta * dt * eye, (dt / eta) * eye, eye - shift]
     if nb:
         blocks.append(sparse.csr_matrix((n, nb)))
     a_bal = sparse.hstack(blocks, format="csr")
     rhs = np.zeros(n)
-    rhs[0] = s0
+    rhs[0] = 0.0 if cyclic else s0
     constraints = [LinearConstraint(a_bal, rhs, rhs)]
 
     if nb:
@@ -159,7 +167,7 @@ def _solve(
     ub[id_ : id_ + n] = spec.power_mw
     lb[is_ : is_ + n] = spec.soc_min_mwh
     ub[is_ : is_ + n] = spec.soc_max_mwh
-    if soc_end is not None:
+    if soc_end is not None and not cyclic:
         lb[is_ + n - 1] = ub[is_ + n - 1] = soc_end
     integrality = np.zeros(nv)
     if nb:
@@ -192,11 +200,18 @@ def optimise(
     soc_start: float | None = None,
     soc_end: float | None = None,
     method: Method = "hybrid",
+    cyclic: bool = False,
 ) -> Dispatch:
     """Revenue-maximising dispatch for a known price path.
 
     ``soc_start`` defaults to the spec's initial state of charge. ``soc_end`` fixes the final state
     of charge (``None`` leaves it free within limits). See the module docstring for ``method``.
+
+    ``cyclic=True`` finds the best *repeating* schedule: the period ends at the same state of
+    charge it starts with, and that level is chosen by the optimiser (``soc_start`` and
+    ``soc_end`` are ignored). Used for the naive daily schedule under continuous operation. If the
+    cyclic LP overlaps at a negative price, the exact MILP is used (the dynamic programme does not
+    handle the wrap-around); these problems are single days, so this stays fast in practice.
     """
     p = np.asarray(prices, dtype=float)
     if len(p) == 0:
@@ -205,18 +220,21 @@ def optimise(
         raise ValueError("price path contains NaN")
     s0 = spec.soc_initial_mwh if soc_start is None else soc_start
     eta = spec.eta_one_way
+    no_binaries = np.array([], dtype=int)
 
     if method == "milp":
-        charge, discharge, soc = _solve(p, spec, s0, soc_end, np.flatnonzero(p < 0))
+        charge, discharge, soc = _solve(p, spec, s0, soc_end, np.flatnonzero(p < 0), cyclic)
         charge, discharge = _remove_overlap(charge, discharge, eta)
         return Dispatch(charge_mw=charge, discharge_mw=discharge, soc_mwh=soc)
 
-    charge, discharge, soc = _solve(p, spec, s0, soc_end, np.array([], dtype=int))
+    charge, discharge, soc = _solve(p, spec, s0, soc_end, no_binaries, cyclic)
     if method == "lp":
         return Dispatch(charge_mw=charge, discharge_mw=discharge, soc_mwh=soc)
     if method != "hybrid":
         raise ValueError(f"unknown method {method!r}")
     if has_negative_price_overlap(charge, discharge, p):
+        if cyclic:
+            return optimise(p, spec, method="milp", cyclic=True)
         from nemspike.battery.dp import optimise_dp
 
         return optimise_dp(p, spec, soc_start=s0, soc_end=soc_end)

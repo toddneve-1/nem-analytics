@@ -245,7 +245,7 @@ def battery(
             test = prices[(ends > fold.test_start) & (ends <= fold.test_end)]
             train = prices[ends <= fold.test_start]
             frames.append(perfect_foresight(test, spec, mode).assign(fold_label=fold.label))
-            frames.append(naive_time_of_day(train, test, spec).assign(fold_label=fold.label))
+            frames.append(naive_time_of_day(train, test, spec, mode).assign(fold_label=fold.label))
         dispatch = pd.concat(frames, ignore_index=True)
         tag = f"{mode}_deg{cost:g}"
         dispatch.to_parquet(out_dir / f"dispatch_{tag}.parquet", index=False)

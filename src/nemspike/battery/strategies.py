@@ -14,8 +14,9 @@ Strategies:
   no real strategy can reach.
 * **Naive time-of-day**: optimise once on the *average* price profile by time of day from the
   training period (data before the test fold), then repeat that fixed schedule every day. Uses no
-  forecasts and no information from the test period. Its schedule returns to the initial level
-  every night, so it is valid under both rule sets.
+  forecasts and no information from the test period. Under continuous rules the schedule is a
+  repeating cycle with a freely chosen overnight level; under daily rules it returns to 50 % at
+  midnight.
 * Forecast-driven rolling-horizon dispatch is added in Step 9.
 
 Revenue is always settled at the actual RRP: ``sum(price * (discharge - charge) * 5/60)``.
@@ -99,22 +100,43 @@ def perfect_foresight(
     return pd.concat(out, ignore_index=True)
 
 
-def time_of_day_schedule(train_prices: pd.DataFrame, spec: BatterySpec) -> Dispatch:
-    """Optimal schedule for the average training-period price at each 5-minute slot of the day."""
+def time_of_day_schedule(
+    train_prices: pd.DataFrame, spec: BatterySpec, mode: Mode = "continuous"
+) -> Dispatch:
+    """Optimal schedule for the average training-period price at each 5-minute slot of the day.
+
+    ``continuous``: a repeating daily cycle. The day ends at the state of charge it started with,
+    and the optimiser chooses that overnight level. ``daily``: the day must start and end at the
+    initial level (50 %). Forcing 50 % at midnight under continuous rules would make the schedule
+    refill late at night and sell that energy next morning, a trade chosen by the rule, not the
+    prices, and loss-making after round-trip losses.
+    """
     p = add_nem_day(train_prices)
     profile = p.groupby("slot")["rrp"].mean().reindex(range(INTERVALS_PER_DAY))
     if profile.isna().any():
         raise ValueError("training data does not cover every 5-minute slot of the day")
+    if mode == "continuous":
+        return optimise(profile.to_numpy(), spec, cyclic=True)
+    if mode != "daily":
+        raise ValueError(f"unknown mode {mode!r}")
     return optimise(
         profile.to_numpy(), spec, soc_start=spec.soc_initial_mwh, soc_end=spec.soc_initial_mwh
     )
 
 
 def naive_time_of_day(
-    train_prices: pd.DataFrame, test_prices: pd.DataFrame, spec: BatterySpec
+    train_prices: pd.DataFrame,
+    test_prices: pd.DataFrame,
+    spec: BatterySpec,
+    mode: Mode = "continuous",
 ) -> pd.DataFrame:
-    """Apply the training-period average-day schedule to every full test day."""
-    schedule = time_of_day_schedule(train_prices, spec)
+    """Apply the training-period average-day schedule to every full test day.
+
+    Under continuous operation the schedule repeats from its own overnight level, so over the
+    quarter it starts and ends at the same state of charge (no net energy gained or lost), which
+    keeps it comparable with perfect foresight's start and end at 50 %.
+    """
+    schedule = time_of_day_schedule(train_prices, spec, mode)
     p = _full_days(add_nem_day(test_prices))
     out = []
     for _, day in p.groupby("nem_day", sort=True):

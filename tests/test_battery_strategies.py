@@ -97,3 +97,13 @@ def test_continuous_rejects_a_gap_in_prices(prices: pd.DataFrame) -> None:
     gappy = prices.drop(index=prices.index[3 * 288 : 4 * 288])  # remove a whole day
     with pytest.raises(ValueError, match="unbroken"):
         perfect_foresight(gappy, SPEC, "continuous")
+
+
+def test_naive_continuous_schedule_carries_charge_between_days(prices: pd.DataFrame) -> None:
+    train, test = prices.iloc[: 5 * 288], prices.iloc[5 * 288 :]
+    d = naive_time_of_day(train, test, SPEC, "continuous")
+    starts = d.groupby("nem_day")["soc_mwh"].first().to_numpy()
+    ends = d.groupby("nem_day")["soc_mwh"].last().to_numpy()
+    # Every day ends at the same level (a repeating cycle), so the quarter gains no net energy.
+    np.testing.assert_allclose(ends, ends[0], atol=1e-9)
+    assert np.isfinite(starts).all()
