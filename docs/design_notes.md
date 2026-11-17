@@ -707,6 +707,52 @@ Findings:
 - **Caveat:** errors around $58/MWh show that storage value swings a lot from day to day. The
   curve captures the typical value, not any particular day, which is a limitation of option C.
 
+### 9.2 Turning quantile forecasts into an expected price
+
+The battery should plan on the **expected** price (revenue is linear in price, so a risk-neutral
+operator maximises expected revenue). The expected price is the probability-weighted average of
+the price distribution, equivalently the average of the quantile function over all probability
+levels. With only q0.1, q0.5, q0.9 and q0.99, the position of the mass within each band and the
+tails beyond q0.1 and q0.99 are unknown, so four constructions were compared against realised
+prices (`uv run python scripts/analysis/expected_price_methods.py`; development folds 1–9, since
+methods c and d learn only from *earlier* folds; 236,448 forecasts per horizon):
+
+- **a, linear:** each band's mean is its midpoint; tails taken at q0.1 and q0.99.
+- **b, asinh:** quantile function linear on the asinh scale between quantiles, tails extrapolated;
+  band means in closed form.
+- **c, learned:** from earlier folds, the empirical probability of each band (correcting the
+  too-narrow intervals), the average position of outcomes inside each band, and the average excess
+  beyond q0.1 and q0.99.
+- **d, hurdle:** (1 − P(spike)) × mean of the quantiles capped at $300 + P(spike) × average
+  historical spike size.
+
+| Horizon | Median (q0.5) RMSE / bias | a RMSE / bias | b RMSE / bias | c RMSE / bias | d RMSE / bias |
+|---|---|---|---|---|---|
+| 30 min | 283.1 / −9.2 | **272.1** / −2.8 | 273.9 / −4.0 | 273.1 / +1.7 | 298.7 / +9.8 |
+| 1 h | 284.7 / −9.8 | **281.0** / −4.3 | 281.4 / −5.5 | 281.2 / +2.4 | 302.4 / +10.1 |
+| 2 h | 286.0 / −9.9 | **284.8** / −4.7 | 285.0 / −5.8 | 284.9 / +2.4 | 297.1 / +9.1 |
+| 3 h | 286.9 / −10.6 | 285.9 / −5.0 | 286.2 / −6.3 | **285.8** / +3.3 | 294.5 / +7.3 |
+| 4 h | 287.8 / −11.8 | **286.8** / −5.2 | 287.1 / −6.7 | 286.9 / +2.4 | 291.9 / +5.9 |
+
+($/MWh. Bias = average of forecast minus actual. Full table, all eight horizons, with calibration
+slope and top-decile checks: `reports/metrics/dev/expected_price_methods.csv`.)
+
+Findings:
+- **a, b and c are practically tied on RMSE** (within about 0.6 % of each other at every horizon)
+  and all beat the median, which **underestimates the mean by $9–12/MWh** (as expected for a
+  right-skewed distribution: the median ignores the spike tail).
+- **c is the least biased** (+$1.7 to +$3.3) because it learns from realised outcomes; a and b
+  remain slightly low (−$3 to −$7).
+- **d (hurdle) is clearly worst**, worse than the median on RMSE, with a calibration slope of
+  0.5–0.8: when the spike probability is high it multiplies by the average historical spike size
+  and overshoots. The classifier ranks spike risk well (PR-AUC) but its probability times a fixed
+  spike size is not a good estimate of the expected price.
+- **All methods under-predict high prices:** calibration slopes of 1.3–1.5 for a, b and c, and in
+  the top decile of forecasts the realised average is about $283–305/MWh against forecasts of
+  about $200–257. The quantile forecasts carry limited information about spike *magnitude*.
+- **RMSE barely improves on the median** (about 4 % at 30 minutes, under 1 % at 4 hours). RMSE is
+  dominated by a few extreme intervals that no method predicts.
+
 ---
 
 ## Planned extensions (after the core pipeline)
