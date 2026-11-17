@@ -16,21 +16,27 @@ REPORT_DIR = Path("reports")
 SNAPSHOT_DIR = Path("results") / "predictions"
 
 
-def load_predictions(stage: str, horizon_minutes: int, model: str) -> pd.DataFrame:
+def load_predictions(
+    stage: str, horizon_minutes: int, model: str, target: str = "point"
+) -> pd.DataFrame:
     """Out-of-sample backtest predictions for one horizon and model.
+
+    ``target="block_mean"`` loads the models trained on 30-minute block-mean prices.
 
     Prefers the full predictions written by ``nemspike backtest`` (git-ignored ``artefacts/``).
     If they are absent, falls back to the compact snapshot committed under ``results/predictions``
     (32-bit floats, so downstream results can differ from a full run in the last digits).
     """
-    full = ARTEFACT_DIR / "backtest" / stage / f"h{horizon_minutes}" / f"{model}.parquet"
-    snapshot = SNAPSHOT_DIR / stage / f"h{horizon_minutes}_{model}.parquet"
+    suffix = "" if target == "point" else "_block"
+    full = ARTEFACT_DIR / "backtest" / stage / f"h{horizon_minutes}{suffix}" / f"{model}.parquet"
+    snapshot = SNAPSHOT_DIR / stage / f"h{horizon_minutes}{suffix}_{model}.parquet"
     for path in (full, snapshot):
         if path.exists():
             return pd.read_parquet(path)
     raise FileNotFoundError(
         f"no {stage} predictions for {model} at {horizon_minutes} minutes (looked for {full} and "
         f"{snapshot}). Run: nemspike backtest --models {model} --horizons {horizon_minutes}"
+        f" --target {target}"
     )
 
 

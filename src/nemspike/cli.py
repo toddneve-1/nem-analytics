@@ -110,6 +110,11 @@ def backtest(
         help="Comma-separated minutes, 'dispatch' (forecast.dispatch_horizons_minutes, needed by "
         "battery-forecast) or 'all'. Default: forecast.horizons_minutes",
     ),
+    target: str = typer.Option(
+        "point",
+        help="point (price of the interval at T+h) or block_mean (mean price of the 30-minute "
+        "block ending at T+h; saved separately under h<minutes>_block)",
+    ),
     track: bool = typer.Option(True, help="Log each model's run to MLflow"),
 ) -> None:
     """Walk-forward backtest. Saves predictions per model, then a summary of all saved models."""
@@ -124,17 +129,20 @@ def backtest(
         raise typer.BadParameter("stage must be 'dev' or 'holdout'")
     if stage == "holdout":
         typer.echo("Scoring the FINAL HOLDOUT. Do not tune anything on these results.")
+    if target not in ("point", "block_mean"):
+        raise typer.BadParameter("target must be point or block_mean")
+    suffix = "" if target == "point" else "_block"
     cfg = load_config(config)
     names = expand([m.strip() for m in models.split(",") if m.strip()])
     hs = _horizons(horizons, cfg)
     prices, weather = load_inputs(cfg)
 
     for h in hs:
-        pred_dir = ARTEFACT_DIR / "backtest" / stage / f"h{h}"
+        pred_dir = ARTEFACT_DIR / "backtest" / stage / f"h{h}{suffix}"
         metric_dir = REPORT_DIR / "metrics" / stage
         pred_dir.mkdir(parents=True, exist_ok=True)
         metric_dir.mkdir(parents=True, exist_ok=True)
-        df = build_features(prices, weather, h, cfg)
+        df = build_features(prices, weather, h, cfg, target_kind=target)
         for name in names:
             typer.echo(f"h={h} min: running {name}")
             diagnostics: list[dict] = []
@@ -144,14 +152,20 @@ def backtest(
             preds.to_parquet(pred_dir / f"{name}.parquet", index=False)
             diag = pd.DataFrame(diagnostics).set_index("fold_label").drop(columns=["model"])
             if diag.shape[1] > 1:
-                diag.to_csv(metric_dir / f"h{h}_{name}_diagnostics.csv")
+                diag.to_csv(metric_dir / f"h{h}{suffix}_{name}_diagnostics.csv")
             if track:
                 from nemspike.tracking.mlflow_utils import log_backtest
 
                 by_fold = summarise(preds, cfg, by_fold=True).droplevel("model")
                 by_fold = by_fold.join(diag.drop(columns=["fold"]), how="left")
                 run_id = log_backtest(
-                    cfg, config, stage, h, name, summarise(preds, cfg).iloc[0], by_fold
+                    cfg,
+                    config,
+                    stage,
+                    h,
+                    f"{name}{suffix}",
+                    summarise(preds, cfg).iloc[0],
+                    by_fold,
                 )
                 typer.echo(f"  logged to MLflow run {run_id}")
 
@@ -159,8 +173,8 @@ def backtest(
         # run separately but compared on the same rows.
         all_preds = pd.concat([pd.read_parquet(p) for p in sorted(pred_dir.glob("*.parquet"))])
         summary = summarise(all_preds, cfg)
-        summary.to_csv(metric_dir / f"h{h}_summary.csv")
-        summarise(all_preds, cfg, by_fold=True).to_csv(metric_dir / f"h{h}_by_fold.csv")
+        summary.to_csv(metric_dir / f"h{h}{suffix}_summary.csv")
+        summarise(all_preds, cfg, by_fold=True).to_csv(metric_dir / f"h{h}{suffix}_by_fold.csv")
         typer.echo(
             f"\n[{stage}] horizon {h} min: {int(summary['n'].iloc[0]):,} test origins, "
             f"{all_preds['fold'].nunique()} fold(s)"
@@ -317,6 +331,12 @@ def battery_forecast(
         False, help="Also run the no-forecast threshold benchmark (historical water value)"
     ),
     tag: str = typer.Option("forecast", help="Name for the output files and MLflow run"),
+    plan_grid: str = typer.Option(
+        "coarse",
+        help="coarse: one forecast per 30-minute block (the dispatch horizons). fine: one price "
+        "per 5-minute interval: point forecasts at 5-30 minutes, then 30-minute block-mean "
+        "forecasts (needs backtests with --horizons 5,10,15,20,25 and --target block_mean)",
+    ),
     model: str = typer.Option(
         "", help="Forecast model whose saved predictions to use (default: config's model)"
     ),
@@ -392,7 +412,16 @@ def battery_forecast(
         cache.parent.mkdir(parents=True, exist_ok=True)
         values.to_parquet(cache, index=False)
 
-    preds = {h: load_predictions("dev", h, model) for h in horizons}
+    # Which forecast prices each 5-minute interval of the planning window.
+    if plan_grid == "coarse":
+        sources = {h: (h, "point") for h in horizons}
+    elif plan_grid == "fine":
+        sources = {m: (m, "point") for m in range(5, 35, 5)}
+        sources |= {m: (30 * -(-m // 30), "block_mean") for m in range(35, 5 * lookahead + 5, 5)}
+        horizons = tuple(sorted(sources))
+    else:
+        raise typer.BadParameter("plan-grid must be coarse or fine")
+    preds = {key: load_predictions("dev", key[0], model, key[1]) for key in set(sources.values())}
     frames = []
     for fold in folds[1:]:
         t0 = time.time()
@@ -411,8 +440,8 @@ def battery_forecast(
                 ).assign(fold_label=fold.label)
             )
         for method in methods:
-            cols = {}
-            for h, pr in preds.items():
+            by_source = {}
+            for key, pr in preds.items():
                 cur = pr[pr["fold"] == fold.number].set_index("origin")
                 bands, recal = None, None
                 if method in ("learned", "recalibrated"):
@@ -433,7 +462,8 @@ def battery_forecast(
                     recal,
                     cur["spike_prob"].to_numpy(),  # type: ignore[arg-type]
                 )
-                cols[h] = pd.Series(price, index=cur.index)
+                by_source[key] = pd.Series(price, index=cur.index)
+            cols = {minutes: by_source[key] for minutes, key in sources.items()}
             plan = pd.DataFrame(cols)
             if "plan" in executions:
                 frames.append(

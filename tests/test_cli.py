@@ -99,6 +99,19 @@ def test_pipeline_runs_end_to_end(project: Path, monkeypatch: pytest.MonkeyPatch
     assert (ladder["net_revenue"] <= ladder.loc["perfect_foresight", "net_revenue"] + 1e-6).all()
     assert ladder["capture_best10"].notna().all()
 
+    # Step 2: short-horizon point forecasts, block-mean targets, and the fine planning grid.
+    _run(project, monkeypatch, "backtest", "--models", "lgbm_asinh", "--horizons", "5,10,15,20,25",
+         "--no-track")  # fmt: skip
+    _run(project, monkeypatch, "backtest", "--models", "lgbm_asinh", "--horizons", "60",
+         "--target", "block_mean", "--no-track")  # fmt: skip
+    assert (project / "artefacts/backtest/dev/h60_block/lgbm_asinh.parquet").exists()
+    assert (metrics / "h60_block_summary.csv").exists()
+    _run(project, monkeypatch, "battery-forecast", "--price-methods", "learned", "--plan-grid",
+         "fine", "--execution", "plan,curve", "--tag", "fine", "--no-track")  # fmt: skip
+    fine = pd.read_csv(metrics / "battery_summary_fine_deg40.csv", index_col=0)
+    assert {"forecast_learned", "curve_learned"} <= set(fine.index)
+    assert (fine["net_revenue"] <= fine.loc["perfect_foresight", "net_revenue"] + 1e-6).all()
+
 
 def test_battery_forecast_falls_back_to_committed_snapshots(
     project: Path, monkeypatch: pytest.MonkeyPatch

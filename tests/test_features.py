@@ -233,3 +233,30 @@ def test_feature_columns_exclude_target(prices, weather, cfg: Config) -> None:
     cols = feature_columns(build_features(prices, weather, 30, cfg))
     assert TARGET not in cols and "target_time" not in cols
     assert any(c.startswith("wx_") for c in cols)
+
+
+def test_block_mean_target_averages_the_block_ending_at_the_horizon(prices) -> None:
+    grid = to_regular_grid(prices)
+    target = make_target(grid, 60, "block_mean")
+    origin = grid.index[400]
+    s = prices.set_index("interval_end")["rrp"]
+    block = s[
+        (s.index > origin + pd.Timedelta(minutes=30))
+        & (s.index <= origin + pd.Timedelta(minutes=60))
+    ]
+    assert len(block) == 6
+    assert target.loc[origin] == pytest.approx(block.mean())
+
+
+def test_block_mean_target_has_no_lookahead(prices, weather, cfg: Config) -> None:
+    def build(p: pd.DataFrame, w: pd.DataFrame | None) -> pd.DataFrame:
+        return build_features(p, w, 60, cfg, target_kind="block_mean")
+
+    origins = _sample_origins(build(prices, weather), n=3)
+    lag = pd.Timedelta(hours=cfg.data.weather.availability_lag_hours)
+    assert find_lookahead(build, prices, weather, origins, lag) == {}
+
+
+def test_block_mean_target_rejects_short_horizons(prices) -> None:
+    with pytest.raises(ValueError):
+        make_target(to_regular_grid(prices), 25, "block_mean")

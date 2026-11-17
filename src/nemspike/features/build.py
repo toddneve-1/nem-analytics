@@ -28,11 +28,31 @@ TARGET_TIME = "target_time"
 NON_FEATURE_COLUMNS = (TARGET, TARGET_TIME)
 
 
-def make_target(grid: pd.DataFrame, horizon_minutes: int) -> pd.Series:
-    """RRP of the interval ending ``horizon_minutes`` after each origin."""
+BLOCK_MINUTES = 30
+
+
+def make_target(grid: pd.DataFrame, horizon_minutes: int, kind: str = "point") -> pd.Series:
+    """Forecast target for each origin T.
+
+    * ``point``: RRP of the interval ending at T + horizon.
+    * ``block_mean``: mean RRP of the six 5-minute intervals in the 30-minute block ending at
+      T + horizon (intervals ending T + h - 25 ... T + h). This is how the rolling battery uses a
+      forecast at a 30-minute horizon grid: as the price of the whole block. Every interval in the
+      block lies after T, so the target uses no information available at T. NaN if any of the six
+      prices is missing.
+    """
     if horizon_minutes <= 0 or horizon_minutes % 5:
         raise ValueError("horizon must be a positive multiple of 5 minutes")
-    return grid["rrp"].shift(-(horizon_minutes // 5)).rename(TARGET)
+    steps = horizon_minutes // 5
+    if kind == "point":
+        return grid["rrp"].shift(-steps).rename(TARGET)
+    if kind == "block_mean":
+        n = BLOCK_MINUTES // 5
+        if horizon_minutes < BLOCK_MINUTES:
+            raise ValueError("block-mean targets need a horizon of at least one block")
+        block = grid["rrp"].rolling(n, min_periods=n).mean()  # mean of the n intervals ending here
+        return block.shift(-steps).rename(TARGET)
+    raise ValueError(f"unknown target kind {kind!r}")
 
 
 def build_features(
@@ -41,6 +61,7 @@ def build_features(
     horizon_minutes: int,
     cfg: Config,
     drop_warmup: bool = True,
+    target_kind: str = "point",
 ) -> pd.DataFrame:
     """Feature table for one horizon, indexed by origin.
 
@@ -64,7 +85,7 @@ def build_features(
         parts.append(build_weather_features(weather, origins, cfg.features.weather_builders, lag))
 
     df = pd.concat(parts, axis=1)
-    df[TARGET] = make_target(grid, horizon_minutes)
+    df[TARGET] = make_target(grid, horizon_minutes, target_kind)
     df[TARGET_TIME] = origins + pd.Timedelta(minutes=horizon_minutes)
     if drop_warmup:
         df = df.iloc[INTERVALS_PER_WEEK:]
