@@ -54,3 +54,34 @@ def test_negative_price_loophole_is_removed_before_taking_duals() -> None:
     assert ((lp.charge_mw > 1e-6) & (lp.discharge_mw > 1e-6)).any()  # the loophole exists
     values = storage_values(prices, spec, soc_end=180.0)
     assert np.isfinite(values).all()
+
+
+# --- water-value curve -----------------------------------------------------------------------
+
+
+def test_day_type_marks_weekends_and_vic_holidays() -> None:
+    import pandas as pd
+
+    from nemspike.battery.water_value import day_type
+
+    # Interval ends (UTC) for 10:00 AEST on: Fri 1 Nov, Sat 2 Nov, Tue 5 Nov 2024 (Melbourne Cup).
+    ends = pd.Series(
+        pd.to_datetime(["2024-11-01 00:05", "2024-11-02 00:05", "2024-11-05 00:05"], utc=True)
+    )
+    assert day_type(ends).tolist() == [0, 1, 1]
+
+
+def test_curve_uses_only_history_before_cutoff() -> None:
+    import pandas as pd
+
+    from nemspike.battery.water_value import day_type, slot_of_day, water_value_curve
+
+    ends = pd.Series(pd.date_range("2024-01-01 14:05", periods=288 * 14, freq="5min", tz="UTC"))
+    values = pd.DataFrame(
+        {"interval_end": ends, "value": 10.0, "slot": slot_of_day(ends), "weekend": day_type(ends)}
+    )
+    cutoff = ends.iloc[288 * 10]
+    values.loc[values["interval_end"] > cutoff, "value"] = 9999.0  # the future
+    curve = water_value_curve(values, cutoff)
+    assert len(curve) == 2 * 288
+    assert (curve == 10.0).all()

@@ -17,11 +17,14 @@ its duals are exact for that choice. So:
 
 from __future__ import annotations
 
+import holidays
 import numpy as np
+import pandas as pd
 from scipy import sparse
 from scipy.optimize import linprog
 
 from nemspike.battery.lp import DT_HOURS, OVERLAP_TOL, BatterySpec, optimise
+from nemspike.timeutils import INTERVAL, to_nem_time
 
 
 def _lp_with_duals(
@@ -77,3 +80,59 @@ def storage_values(
         charge_cap[overlap & uses_discharge] = 0.0
         discharge_cap[overlap & ~uses_discharge] = 0.0
     raise RuntimeError("could not remove simultaneous charge/discharge for the water value")
+
+
+# --- empirical water-value curve -------------------------------------------------------------
+
+
+def day_type(interval_end: pd.Series) -> np.ndarray:
+    """1 for weekends and Victorian public holidays, else 0 (by interval start in NEM time).
+
+    Grouping chosen from data: weekday/weekend beat both a single curve and day-of-week curves
+    out of sample (design notes 9.1).
+    """
+    start = to_nem_time(interval_end - INTERVAL)
+    vic = holidays.Australia(subdiv="VIC", years=sorted(set(start.dt.year)))
+    is_holiday = np.array([d in vic for d in start.dt.date])
+    return ((start.dt.day_of_week.to_numpy() >= 5) | is_holiday).astype(int)
+
+
+def slot_of_day(interval_end: pd.Series) -> np.ndarray:
+    """5-minute slot of the NEM day (0..287) by interval start."""
+    start = to_nem_time(interval_end - INTERVAL)
+    return (start.dt.hour * 12 + start.dt.minute // 5).to_numpy()
+
+
+def quarterly_storage_values(prices: pd.DataFrame, spec: BatterySpec) -> pd.DataFrame:
+    """Storage values for every interval, optimising each NEM quarter continuously (50 % at the
+    quarter's start and end, as in the perfect-foresight benchmark)."""
+    p = prices.sort_values("interval_end").reset_index(drop=True)
+    start = to_nem_time(p["interval_end"] - INTERVAL).dt.tz_localize(None)
+    quarter = start.dt.to_period("Q")
+    parts = []
+    for _, chunk in p.groupby(quarter.to_numpy(), sort=True):
+        v = storage_values(chunk["rrp"].to_numpy(), spec, soc_end=spec.soc_initial_mwh)
+        parts.append(pd.Series(v, index=chunk.index))
+    return pd.DataFrame(
+        {
+            "interval_end": p["interval_end"],
+            "value": pd.concat(parts).sort_index().to_numpy(),
+            "slot": slot_of_day(p["interval_end"]),
+            "weekend": day_type(p["interval_end"]),
+        }
+    )
+
+
+def water_value_curve(values: pd.DataFrame, before: pd.Timestamp) -> pd.Series:
+    """Mean storage value by (weekend, slot) using only intervals ending at or before ``before``."""
+    hist = values[values["interval_end"] <= before]
+    curve = hist.groupby(["weekend", "slot"])["value"].mean()
+    if len(curve) < 2 * 288:
+        raise ValueError("history does not cover every slot for both weekdays and weekends")
+    return curve
+
+
+def lookup_value(curve: pd.Series, interval_end: pd.Series) -> np.ndarray:
+    """Water value ($/MWh) at the given interval ends."""
+    keys = pd.MultiIndex.from_arrays([day_type(interval_end), slot_of_day(interval_end)])
+    return curve.reindex(keys).to_numpy()
