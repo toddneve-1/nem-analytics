@@ -14,6 +14,8 @@ Methods (all leakage-free):
      q0.99 (also corrects for mis-calibrated intervals)
   d  hurdle: (1 - p_spike) * mean of the quantiles clipped at the spike threshold
      + p_spike * mean spike size from EARLIER folds
+  e  recalibrated: method c's expected price mapped, per spike-probability bucket, through an
+     isotonic regression of realised price learned from EARLIER folds (uses the spike classifier)
   median: q0.5, for reference
 
 Scored on development folds 1-9 (fold 0 has no earlier history for c and d), all horizons.
@@ -29,6 +31,8 @@ from pathlib import Path
 
 import numpy as np
 import pandas as pd
+
+from nemspike.battery.expected_price import LearnedBands, SpikeRecalibration
 
 PRED_DIR = Path("artefacts/backtest/dev")
 OUT = Path("reports/metrics/dev/expected_price_methods.csv")
@@ -123,6 +127,13 @@ def main() -> None:
             q = cur[QS].to_numpy()
             thr = cur["spike_threshold"].to_numpy()
             spike_mean = float(hist.loc[hist["y"] > hist["spike_threshold"], "y"].mean())
+            bands = LearnedBands.fit(hist[QS].to_numpy(), hist["y"].to_numpy())
+            recal = SpikeRecalibration().fit(
+                bands.expected(hist[QS].to_numpy()),
+                hist["spike_prob"].to_numpy(),
+                hist["y"].to_numpy(),
+            )
+            recalibrated = recal.predict(bands.expected(q), cur["spike_prob"].to_numpy())
             parts.append(
                 pd.DataFrame(
                     {
@@ -132,12 +143,13 @@ def main() -> None:
                         "b_asinh": method_b(q),
                         "c_learned": method_c(q, fit_c(hist)),
                         "d_hurdle": method_d(q, cur["spike_prob"].to_numpy(), thr, spike_mean),
+                        "e_recalibrated": recalibrated,
                     }
                 )
             )
         res = pd.concat(parts, ignore_index=True)
         y = res["y"].to_numpy()
-        for m in ["median", "a_linear", "b_asinh", "c_learned", "d_hurdle"]:
+        for m in ["median", "a_linear", "b_asinh", "c_learned", "d_hurdle", "e_recalibrated"]:
             rows.append({"horizon": h, "method": m, "n": len(y)} | score(y, res[m].to_numpy()))
         rows.append(
             {
