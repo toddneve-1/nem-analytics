@@ -62,6 +62,14 @@ Key assumptions (amongst others):
   or marginal loss factors; settled at the 5-minute regional price.
 - **No simultaneous charging and discharging.** Without this rule, an optimiser exploits negative
   prices by doing both at once to "burn" energy through losses, which a real battery cannot do.
+- **Forecast-driven battery plans on the expected price, not the median (risk-neutral).** Revenue
+  is price × energy, so over many trades the average revenue depends on the *average* (expected)
+  price. The median ignores the spike tail and, on our forecasts, sits $9–12/MWh below the
+  realised average, which would make the battery systematically undervalue high-price periods.
+  The expected price is built from the quantile forecasts using band probabilities and positions
+  learned from earlier forecasts (method details and the comparison of four alternatives are in
+  the design notes, section 9.2). Planning on the expected price assumes a risk-neutral operator:
+  it does not penalise the chance of a bad outcome, as a risk-averse trader might.
 
 Outcomes over the 912 development days (Jan 2024 – Jun 2026), at $40/MWh wear cost:
 

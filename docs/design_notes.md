@@ -781,6 +781,11 @@ Findings:
 - Battery runs continuously within each test quarter but starts and ends each quarter at 50 %; the
   wear cost ($40/MWh) is an illustrative assumption, not a calibrated figure.
 - No network constraints, marginal loss factors or intra-regional congestion.
+- Risk-neutral planning: the forecast-driven battery plans on the **expected** price because
+  revenue is linear in price, so maximising expected revenue means planning on the expected price
+  (the median would undervalue the spike tail by $9–12/MWh on our forecasts). It does not
+  penalise downside risk, and a single expected price per interval ignores the value of keeping
+  flexibility for uncertain spikes (the water value only partly captures this).
 - Weather from a single Melbourne point, not a demand- or generation-weighted average.
 - Weather is ERA5 reanalysis (published about 5 days late, 25 km grid) standing in for real-time
   observations; no weather *forecasts* are used yet, which limits the 4-hour horizon.
