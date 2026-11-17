@@ -840,6 +840,72 @@ prices cannot be ranked against each other on this evidence.
   noise, but it illustrates that forecast accuracy and decision value are different criteria
   (decision-focused evaluation).
 
+### 9.4 Ladder steps 1 and 3: threshold execution and a spike-recalibrated price
+
+Following an external review, two changes were tested that need no retraining (development
+folds 1–9, same 821 days, $40/MWh wear; `nemspike battery-forecast --price-methods
+learned,recalibrated --execution plan,threshold --threshold-only --tag ladder`).
+
+**Step 1, threshold execution.** Re-plan every 5 minutes; from each plan take the marginal value
+λ of energy stored after the next interval (LP dual), then act on the *realised* price p of that
+interval: discharge at full power if p > λ/η + wear, charge if p < λη, otherwise idle. Under the
+price-taker assumption this mirrors a price-contingent offer submitted before the interval, so
+the executed interval needs no forecast. When the quarter's end comes within 4 hours, one plan to
+the end is made and followed. Benchmark added: **threshold-only**, the same rule with λ taken from
+the historical water-value curve (no forecasts), to separate the execution mechanism from the
+forecasts.
+
+**Step 3, recalibrated price.** From earlier folds, per horizon: method c's expected price mapped
+through an isotonic (monotone) regression of realised price, separately by spike-probability
+bucket (0–5, 5–15, 15–35, >35 %; sparse buckets merged).
+
+**Accuracy of the recalibrated price first** (`scripts/analysis/expected_price_methods.py`): much
+*worse* than method c. RMSE 443 against 273 at 30 minutes and 376 against 287 at 4 hours;
+calibration slope 0.2–0.5 (ideal 1). In the top decile it predicts about $650–700 at 30 minutes
+where about $305 materialises. The high-probability buckets are learned from a handful of extreme
+episodes, and isotonic regression, unsmoothed, reproduces their top end and projects spike-level
+prices onto every later high-risk forecast.
+
+**Battery results** (95 % block-bootstrap intervals, 7-day blocks; differences against naive):
+
+| Strategy | Capture (interval) | Best-10-days capture | Loss-making days | Cycles/day | Total vs naive, $m (interval) | Days ahead of naive (interval) | Median daily gap, $k (interval) |
+|---|---|---|---|---|---|---|---|
+| Forecast, plan-following, learned (previous headline) | 47.1 % (41.1–54.0) | 35.5 % | 9.4 % | 1.14 | +0.35 (−3.15 to +2.82) | 61 % (57–65) | +2.2 (+1.1 to +2.9) |
+| Forecast, plan-following, recalibrated | 40.1 % (33.2–48.6) | 26.9 % | 14.3 % | 1.28 | −1.94 (−6.29 to +1.11) | 58 % (54–63) | +1.2 (+0.5 to +2.2) |
+| Threshold, learned (step 1) | 46.2 % (42.3–50.6) | 45.9 % | 20.7 % | 1.98 | +0.06 (−1.85 to +1.66) | 51 % (46–55) | +0.1 (−0.7 to +0.8) |
+| Threshold, recalibrated (steps 1 + 3) | 49.1 % (43.2–54.8) | 58.4 % | 20.8 % | 2.00 | +1.01 (−0.34 to +2.45) | 53 % (49–57) | +0.5 (−0.2 to +1.5) |
+| Threshold-only (no forecasts) | 17.2 % (12.1–24.7) | 0.2 % | 13.4 % | 0.62 | −9.52 (−16.34 to −4.18) | 35 % (31–39) | −4.0 (−4.9 to −3.1) |
+| Naive daily schedule | 46.0 % (40.5–51.2) | 54.0 % | 17.7 % | 0.96 | – | – | – |
+
+(`reports/metrics/dev/battery_summary_ladder_deg40.csv`; per quarter in
+`battery_by_fold_ladder_deg40.csv`. The plan-following learned row reproduces section 9.3 exactly.)
+
+Findings:
+- **No variant is distinguishable from naive on total revenue**: every total-difference interval
+  spans zero except threshold-only, which is clearly worse.
+- **Threshold execution captures the extreme days much better** (best-10-days capture 35 % → 46 %
+  with the learned price, 58 % with the recalibrated price, against naive's 54 %), and recovers
+  2025 Q2 (36 % → 48–61 %, the June spikes). It reacts to the realised spike instead of a
+  forecast that under-estimated it.
+- **But it over-trades on ordinary days**: loss-making days double (9 % → 21 %), cycling rises from
+  1.1 to 2.0 a day, and the typical-day advantage over naive disappears (days ahead 61 % → 51–53 %,
+  median gap no longer distinguishable from zero). Likely causes: full-power bang-bang actions
+  around a single marginal value, so small noisy price excursions trigger full-size trades; and λ
+  taken at the current state of charge only, with no quantity bands.
+- **The mechanism is not the source of value: the forecasts are.** Threshold-only, the same rule
+  with a historical λ, captures 17 % and loses to naive on every measure, so the forecast-driven
+  threshold strategy's 46–49 % comes from the forecasts.
+- **Recalibration hurts plan-following and helps threshold execution, unstably.** With threshold
+  execution it gives the highest total (49 %) and best-10-days capture (58 %), but its first fold
+  (2024 Q2, learned from one quarter of history) captures only 12 %, and its accuracy is far worse
+  than method c. The gain looks like an over-cautious price that happens to hold charge for
+  spikes, not a better forecast: exactly the kind of result that can fit June 2025.
+- **Conclusion so far:** the plan-following strategy with the learned price remains the only one
+  that is reliably better than naive on a typical day; threshold execution trades typical-day
+  reliability for extreme-day capture. Any refinement (price bands, a deadband, smoothing the
+  recalibration) should be chosen on development folds with these same pre-declared measures, and
+  will need the holdout to confirm.
+
 ---
 
 ## Planned extensions (after the core pipeline)
