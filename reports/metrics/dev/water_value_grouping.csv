@@ -1,0 +1,7 @@
+grouping,statistic,groups,test_mae,test_rmse
+time of day only,mean,288,58.43686019243095,277.4693604175291
+time of day only,median,288,58.04393724011085,278.17343813013395
+time of day x weekday/weekend (holidays as weekend),mean,576,57.860210676172606,277.00171051520033
+time of day x weekday/weekend (holidays as weekend),median,576,57.559076375125294,277.66713529202053
+time of day x day of week,mean,2016,59.275937610242266,277.98070924596095
+time of day x day of week,median,2016,58.456559649315366,278.2752766763499

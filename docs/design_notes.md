@@ -661,6 +661,54 @@ ramp limits, no network constraints or marginal loss factors, settlement at the 
 
 ---
 
+## 9. Forecast-driven battery (in progress)
+
+### 9.1 Valuing energy left at the end of a planning window: grouping analysis
+
+The forecast-driven battery plans 4 hours ahead (the forecasts' reach), re-planning every 30
+minutes. Each plan needs a value for energy still stored at the window's end; otherwise it treats
+leftover energy as worthless, will not charge for a peak just beyond the window, and sells too
+early. The chosen approach (option C) is an empirical **water-value curve**: the marginal value of
+stored energy from perfect foresight on training data, averaged by time of day.
+
+**What the marginal value is.** The shadow price (dual) of the energy-balance constraint in the
+perfect-foresight LP: how much one extra MWh in storage at that interval would add to revenue.
+`nemspike.battery.water_value.storage_values` computes it. Simultaneous charge and discharge at
+negative prices appeared in 16 intervals across three quarters even at $40/MWh wear (all below
+−$370/MWh); for those, the charge-or-discharge choice is fixed from the exact solution and the LP
+re-solved, so the duals are exact. Tests check the dual against a finite difference and two
+textbook cases: when charging is easy before a peak, stored energy is worth its **replacement
+cost** (cheap price ÷ charging efficiency); when charging is constrained, it is worth the **peak
+price** after discharge losses and wear. The water value reflects whichever constraint binds.
+
+**Should the curve depend on day type? Tested, not assumed** (`uv run python
+scripts/analysis/water_value_grouping.py`). Values were computed for 2023–2025 (each quarter
+optimised continuously at $40/MWh). Curves were learned on 2023–2024 and scored on 2025:
+
+| Grouping | Groups | 2025 MAE ($/MWh) | 2025 RMSE ($/MWh) |
+|---|---|---|---|
+| Time of day only | 288 | 58.44 | 277.47 |
+| **Time of day × weekday/weekend (public holidays as weekend)** | 576 | **57.86** | **277.00** |
+| Time of day × day of week | 2,016 | 59.28 | 277.98 |
+
+(Mean curves; median curves rank the same way. Output in `reports/metrics/dev/water_value_grouping.csv`.)
+
+Findings:
+- **Weekends are genuinely different:** average storage value $26–32/MWh on Saturday and Sunday
+  against $49–68/MWh on weekdays. At weekend middays it is even negative (−$17 to −$31/MWh at
+  13:00): stored energy is a liability when you would rather have empty room to be paid to charge.
+- **Day-of-week differences do not generalise.** Apparent weekday differences (Thursday 18:00
+  $224 against $91–129 on other weekdays; Tuesday 13:00 $88 against $1–9) come from a handful of
+  spike days in 2023–2024 and make 2025 predictions worse: seven groups leave too few days each to
+  average away spikes (overfitting).
+- **Decision:** time of day × weekday/weekend, public holidays treated as weekends, using the
+  **mean** (the expected value is the economically relevant quantity, and the mean is best on
+  RMSE, which it is designed to minimise).
+- **Caveat:** errors around $58/MWh show that storage value swings a lot from day to day. The
+  curve captures the typical value, not any particular day, which is a limitation of option C.
+
+---
+
 ## Planned extensions (after the core pipeline)
 
 1. **AEMO pre-dispatch benchmark.** Compare the models against AEMO's own published forecasts:
