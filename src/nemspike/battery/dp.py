@@ -33,6 +33,7 @@ def optimise_dp(
     soc_start: float | None = None,
     soc_end: float | None = None,
     m: int = DEFAULT_STEPS_PER_FULL_CHARGE,
+    terminal_value: float = 0.0,
 ) -> Dispatch:
     """Optimal exclusive dispatch on a state-of-charge grid (see module docstring)."""
     p = np.asarray(prices, dtype=float)
@@ -56,7 +57,8 @@ def optimise_dp(
     def to_index(soc: float) -> int:
         return int(np.argmin(np.abs(grid - soc)))
 
-    value = np.zeros(n_states)
+    # Value-to-go after the last interval: energy still stored is credited at terminal_value.
+    value = terminal_value * grid
     if soc_end is not None:
         value = np.full(n_states, -np.inf)
         value[to_index(soc_end)] = 0.0

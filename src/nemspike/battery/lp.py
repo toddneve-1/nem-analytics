@@ -116,6 +116,7 @@ def _solve(
     soc_end: float | None,
     binary_idx: np.ndarray,
     cyclic: bool = False,
+    terminal_value: float = 0.0,
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
     """One LP / MILP solve. Intervals in ``binary_idx`` may not charge and discharge together.
 
@@ -135,6 +136,8 @@ def _solve(
     cost = np.zeros(nv)
     cost[ic : ic + n] = p * dt
     cost[id_ : id_ + n] = (-p + spec.degradation_cost_per_mwh) * dt
+    # Value of energy still stored at the end ($/MWh x MWh); milp minimises, hence the minus.
+    cost[is_ + n - 1] -= terminal_value
 
     # Energy balance: s_t - s_{t-1} - eta*dt*c_t + dt/eta*d_t = (s0 if t == 0 else 0)
     eye = sparse.identity(n, format="csr")
@@ -201,6 +204,7 @@ def optimise(
     soc_end: float | None = None,
     method: Method = "hybrid",
     cyclic: bool = False,
+    terminal_value: float = 0.0,
 ) -> Dispatch:
     """Revenue-maximising dispatch for a known price path.
 
@@ -212,6 +216,10 @@ def optimise(
     ``soc_end`` are ignored). Used for the naive daily schedule under continuous operation. If the
     cyclic LP overlaps at a negative price, the exact MILP is used (the dynamic programme does not
     handle the wrap-around); these problems are single days, so this stays fast in practice.
+
+    ``terminal_value`` ($/MWh) credits energy still stored at the end of the period. It is used by
+    rolling-horizon dispatch, where a plan only sees a few hours ahead: without it, leftover
+    energy would count as worthless. Use with ``soc_end=None``.
     """
     p = np.asarray(prices, dtype=float)
     if len(p) == 0:
@@ -223,11 +231,13 @@ def optimise(
     no_binaries = np.array([], dtype=int)
 
     if method == "milp":
-        charge, discharge, soc = _solve(p, spec, s0, soc_end, np.flatnonzero(p < 0), cyclic)
+        charge, discharge, soc = _solve(
+            p, spec, s0, soc_end, np.flatnonzero(p < 0), cyclic, terminal_value
+        )
         charge, discharge = _remove_overlap(charge, discharge, eta)
         return Dispatch(charge_mw=charge, discharge_mw=discharge, soc_mwh=soc)
 
-    charge, discharge, soc = _solve(p, spec, s0, soc_end, no_binaries, cyclic)
+    charge, discharge, soc = _solve(p, spec, s0, soc_end, no_binaries, cyclic, terminal_value)
     if method == "lp":
         return Dispatch(charge_mw=charge, discharge_mw=discharge, soc_mwh=soc)
     if method != "hybrid":
@@ -237,7 +247,7 @@ def optimise(
             return optimise(p, spec, method="milp", cyclic=True)
         from nemspike.battery.dp import optimise_dp
 
-        return optimise_dp(p, spec, soc_start=s0, soc_end=soc_end)
+        return optimise_dp(p, spec, soc_start=s0, soc_end=soc_end, terminal_value=terminal_value)
     charge, discharge = _remove_overlap(charge, discharge, eta)
     return Dispatch(charge_mw=charge, discharge_mw=discharge, soc_mwh=soc)
 
