@@ -319,18 +319,18 @@ def battery(
 def battery_forecast(
     config: Path = ConfigOpt,
     price_methods: str = typer.Option(
-        "learned,median,linear",
-        help="Planning prices: learned (method c), recalibrated, median, linear",
+        "learned",
+        help="Planning prices: learned (method c, the default), recalibrated, median, linear",
     ),
     execution: str = typer.Option(
-        "plan",
+        "curve",
         help="plan (follow each 30-minute plan), threshold and/or curve (5-minute re-plan; curve "
         "executes the plan's optimal offer curve at the realised price)",
     ),
     threshold_only: bool = typer.Option(
         False, help="Also run the no-forecast threshold benchmark (historical water value)"
     ),
-    tag: str = typer.Option("forecast", help="Name for the output files and MLflow run"),
+    tag: str = typer.Option("curve", help="Name for the output files and MLflow run"),
     plan_grid: str = typer.Option(
         "coarse",
         help="coarse: one forecast per 30-minute block (the dispatch horizons). fine: one price "
@@ -343,6 +343,9 @@ def battery_forecast(
     track: bool = typer.Option(True, help="Log the run to MLflow"),
 ) -> None:
     """Forecast-driven rolling-horizon battery on development folds, against the benchmarks.
+
+    Defaults are the adopted design: learned expected price, offer-curve execution (5-minute
+    re-planning; the plan's best response to the realised price), coarse 30-minute grid.
 
     Folds 1 onwards only: the learned planning price is fitted on earlier folds' out-of-sample
     forecasts, so fold 0 has no history. Benchmarks are evaluated on the same days.

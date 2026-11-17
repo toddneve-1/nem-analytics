@@ -999,6 +999,12 @@ Findings:
   the coarse grid**: simplest, no extra models, and distinguishable from naive on every measure.
   The recalibrated price is marginally higher on totals but unstable across quarters (9.4–9.5).
 
+**Decision (adopted):** offer-curve execution with the learned expected price on the coarse
+30-minute grid is the project's forecast-driven strategy and the README headline. It is the
+default of `nemspike battery-forecast`. The recalibrated price, threshold execution, the fine grid
+and plan-following are kept as documented alternatives. Next: score this one design once on the
+holdout (Jul–Oct 2026).
+
 ---
 
 ## Planned extensions (after the core pipeline)

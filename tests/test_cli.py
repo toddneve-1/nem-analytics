@@ -73,7 +73,8 @@ def test_pipeline_runs_end_to_end(project: Path, monkeypatch: pytest.MonkeyPatch
     _run(project, monkeypatch, "battery", "--no-track")
     assert (project / "reports/metrics/dev/battery_summary_continuous.csv").exists()
 
-    _run(project, monkeypatch, "battery-forecast", "--price-methods", "learned", "--no-track")
+    _run(project, monkeypatch, "battery-forecast", "--price-methods", "learned", "--execution",
+         "plan", "--tag", "forecast", "--no-track")  # fmt: skip
     metrics = project / "reports/metrics/dev"
     summary = pd.read_csv(metrics / "battery_summary_forecast_deg40.csv", index_col=0)
     assert set(summary.index) == {"forecast_learned", "naive_time_of_day", "perfect_foresight"}
@@ -112,6 +113,11 @@ def test_pipeline_runs_end_to_end(project: Path, monkeypatch: pytest.MonkeyPatch
     assert {"forecast_learned", "curve_learned"} <= set(fine.index)
     assert (fine["net_revenue"] <= fine.loc["perfect_foresight", "net_revenue"] + 1e-6).all()
 
+    # Defaults reproduce the adopted design: learned price, offer-curve execution, tag "curve".
+    _run(project, monkeypatch, "battery-forecast", "--no-track")
+    adopted = pd.read_csv(metrics / "battery_summary_curve_deg40.csv", index_col=0)
+    assert set(adopted.index) == {"curve_learned", "naive_time_of_day", "perfect_foresight"}
+
 
 def test_battery_forecast_falls_back_to_committed_snapshots(
     project: Path, monkeypatch: pytest.MonkeyPatch
@@ -123,7 +129,8 @@ def test_battery_forecast_falls_back_to_committed_snapshots(
     before = pd.read_csv(metrics / "battery_summary_forecast_deg40.csv", index_col=0)
     (project / "artefacts/backtest").rename(project / "artefacts/backtest_moved")
     try:
-        _run(project, monkeypatch, "battery-forecast", "--price-methods", "learned", "--no-track")
+        _run(project, monkeypatch, "battery-forecast", "--price-methods", "learned",
+             "--execution", "plan", "--tag", "forecast", "--no-track")  # fmt: skip
     finally:
         (project / "artefacts/backtest_moved").rename(project / "artefacts/backtest")
     after = pd.read_csv(metrics / "battery_summary_forecast_deg40.csv", index_col=0)

@@ -72,10 +72,14 @@ Key assumptions (amongst others):
 
 Strategies compared:
 - **Perfect foresight:** knows every actual price in advance. The theoretical maximum.
-- **Forecast-driven:** every 30 minutes, plans the next 4 hours on the forecast expected price,
-  carries out the first 30 minutes, then re-plans. Energy left at the end of each plan is valued
-  using a "water value" curve: the typical marginal value of stored energy by time of day,
-  weekday versus weekend, learned from earlier data.
+- **Forecast-driven (offer curve):** every 5 minutes, plans the next 4 hours on the forecast
+  expected price, valuing energy left at the end of the plan with a "water value" curve (the
+  typical marginal value of stored energy by time of day, weekday versus weekend, learned from
+  earlier data). The next interval is then executed as the plan's best response to the price that
+  actually clears: re-optimised with that price, so the battery trades hard only when the price
+  is far from what the rest of the plan makes energy worth. Because the response is fixed before
+  the interval, this is equivalent to submitting a full price-quantity offer curve in advance, as
+  real batteries bid in price bands.
 - **Naive:** the same daily schedule every day (charge in the midday solar trough, discharge in
   the evening peak), optimised on past average prices.
 
@@ -84,44 +88,44 @@ Outcomes over 821 development days (Apr 2024 – Jun 2026), at $40/MWh wear cost
 | Strategy | Net revenue | Per MW per year | Share of perfect foresight (95 % interval) | Loss-making days |
 |---|---|---|---|---|
 | Perfect foresight | $33.1 m | $147,000 | 100 % | < 1 % |
-| **Forecast-driven** | **$15.6 m** | **$69,000** | **47 % (41–54 %)** | **9 %** |
+| **Forecast-driven (offer curve)** | **$18.4 m** | **$82,000** | **56 % (50–62 %)** | **8 %** |
 | Naive daily schedule | $15.2 m | $68,000 | 46 % (41–51 %) | 18 % |
 
 Forecast-driven against naive, same 821 days:
 
 | Measure | Result | 95 % interval | Distinguishable from no difference? |
 |---|---|---|---|
-| Total net revenue ahead | +$0.35 m | −$3.1 m to +$2.8 m | **No** |
-| Share of days ahead | 61 % | 57–65 % | Yes (above 50 %) |
-| Typical (median) day's gap | +$2,200 | +$1,100 to +$2,900 | Yes (above $0) |
+| Total net revenue ahead | +$3.2 m | +$1.3 m to +$4.8 m | Yes |
+| Share of days ahead | 70 % | 66–74 % | Yes (above 50 %) |
+| Typical (median) day's gap | +$3,700 | +$3,000 to +$4,600 | Yes (above $0) |
 
-(Intervals from a block bootstrap over days; see design notes §9.3.)
+(Intervals from a block bootstrap over days; see design notes §9.5.)
 
-**Summary.** On total revenue, the forecast-driven battery cannot be told apart from the naive
-schedule: it finished $0.35 m ahead, but the interval runs from $3.1 m behind to $2.8 m ahead.
-On a typical day it is reliably better: ahead on 61 % of days, by a median of $2,200, in 8 of 9
-quarters (often by 10–17 percentage points of perfect foresight), with half as many loss-making
-days. The two views disagree because revenue is concentrated in a few extreme days. On two days
-in June 2025, with prices up to about $15,000/MWh, it fell $2.2 m behind naive, almost exactly
-offsetting the $2.5 m it gained across the other 819 days.
+**Summary.** The forecast-driven battery beats the naive schedule on every measure: $3.2 m more
+over the period, ahead on 70 % of days and in 8 of 9 quarters, with less than half as many
+loss-making days. It captures 56 % of the perfect-foresight maximum against 46 % for naive.
 
-**Why.** On 26 June 2025, prices were already $180–400 at midday and reached $3,900–14,000 from
-17:00 to 20:30. The forecasts saw an ordinary expensive afternoon: the 4-hour-ahead forecast for
-17:00 had a median of $304 and a 99th percentile of about $2,000, against an actual $9,656. So the
-battery made small trades around $300 and was empty when the spike arrived. The naive schedule
-charged at midday regardless of price and happened to discharge into the spike. The spike
-classifier *did* flag the risk (43 % probability at 13:00), but the battery does not yet use it.
-
-**What could fix it (to be tested):**
-1. Raise the value of stored energy when the forecast spike probability over the next few hours
-   is high, so the battery holds charge on risky afternoons.
-2. Add the spike probability × typical spike size to the planning price.
-3. A simple reserve rule: keep at least a minimum charge whenever spike risk is high.
-4. Better forecasts of spike *size* (the model sees the risk but badly under-estimates magnitude).
+**How we got here.** The first version followed each 30-minute plan as made. It was reliably
+better than naive on a typical day, but not on total revenue: on two extreme days in June 2025,
+with prices up to about $15,000/MWh, the forecasts badly under-estimated the spike (the
+4-hour-ahead forecast for 17:00 on 26 June had a 99th percentile of about $2,000 against an
+actual $9,656), so the battery sold early and was empty when the spike arrived. Letting the
+battery respond to the price that actually clears fixed most of that: on those two days it earned
+$1.8 m, against $0.7 m before (naive earned $2.9 m by happening to discharge into the spikes).
+Simpler fixes were tested and rejected on the same data: a single price threshold at full power
+over-traded on ordinary days, and recalibrating the planning price with the spike probability
+gave much less accurate prices and unstable results. Finer forecasts for the first half hour
+made little difference once the battery responds to the actual price. Details: design notes
+§9.3–9.6.
 
 Battery value is concentrated in a few days: the 5 best days earn 30 % of perfect-foresight
 revenue, and the best 10 % of days almost half. Getting the extreme days right matters more than
-anything else.
+anything else, and remains the main gap: on the 10 best days the forecast-driven battery captures
+47 % of perfect foresight, against 54 % for naive.
+
+**Next:** score the chosen design once on the untouched holdout (Jul–Oct 2026); possible
+improvements include forecasting short-horizon price *changes* (the model is currently worse
+than "price stays the same" at 5–25 minutes) and planning over several price scenarios.
 
 More detail will be added as the analysis progresses. Design decisions, all results and their
 limitations are recorded in [`docs/design_notes.md`](docs/design_notes.md).
@@ -189,6 +193,8 @@ uv run nemspike battery --degradation-costs 0,10,20,40,60
 ```bash
 uv run nemspike battery-forecast
 ```
+
+(Defaults reproduce the headline: learned expected price, offer-curve execution.)
 
 ```bash
 uv run nemspike train-final --models lgbm_asinh
