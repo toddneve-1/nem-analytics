@@ -140,8 +140,9 @@ def threshold_dispatch(
     lookahead: int = 48,
     horizons: tuple[int, ...] = DEFAULT_HORIZONS,
     climatology: pd.Series | None = None,
+    offer: str = "threshold",
 ) -> pd.DataFrame:
-    """Re-plan every 5 minutes and execute by price threshold.
+    """Re-plan every 5 minutes and execute by price threshold (or by an optimal offer curve).
 
     At each origin T (every interval):
 
@@ -179,6 +180,10 @@ def threshold_dispatch(
     charge, discharge, soc_path = np.zeros(n), np.zeros(n), np.zeros(n)
     soc = spec.soc_initial_mwh
 
+    if offer not in ("threshold", "curve"):
+        raise ValueError("offer must be 'threshold' or 'curve'")
+    if offer == "curve" and plan_prices is None:
+        raise ValueError("an offer curve needs forecast plan prices")
     final_start = max(n - lookahead, 0)
     for i in range(final_start):
         window = lookahead
@@ -188,6 +193,14 @@ def threshold_dispatch(
                 raise KeyError(f"no forecasts for origin {origin}")
             path = plan_price_path(plan_prices.loc[origin], window, horizons)
             terminal = float(lookup_value(curve, ends.iloc[[i + window - 1]])[0])
+            if offer == "curve":
+                path = path.copy()
+                path[0] = actual[i]  # the offer curve evaluated at the realised price
+                plan = optimise(path, spec, soc_start=soc, terminal_value=terminal)
+                charge[i], discharge[i] = plan.charge_mw[0], plan.discharge_mw[0]
+                soc = float(plan.soc_mwh[0])
+                soc_path[i] = soc
+                continue
             value = float(storage_values(path, spec, soc_start=soc, terminal_value=terminal)[0])
         else:
             value = float(curve_now[i])

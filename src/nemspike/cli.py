@@ -309,7 +309,9 @@ def battery_forecast(
         help="Planning prices: learned (method c), recalibrated, median, linear",
     ),
     execution: str = typer.Option(
-        "plan", help="plan (follow each 30-minute plan) and/or threshold (5-minute re-plan)"
+        "plan",
+        help="plan (follow each 30-minute plan), threshold and/or curve (5-minute re-plan; curve "
+        "executes the plan's optimal offer curve at the realised price)",
     ),
     threshold_only: bool = typer.Option(
         False, help="Also run the no-forecast threshold benchmark (historical water value)"
@@ -367,8 +369,8 @@ def battery_forecast(
     resolve, lookahead = cfg.battery.resolve_intervals, cfg.battery.lookahead_intervals
     methods = [m.strip() for m in price_methods.split(",") if m.strip()]
     executions = [e.strip() for e in execution.split(",") if e.strip()]
-    if not set(executions) <= {"plan", "threshold"}:
-        raise typer.BadParameter("execution must be plan and/or threshold")
+    if not set(executions) <= {"plan", "threshold", "curve"}:
+        raise typer.BadParameter("execution must be plan, threshold and/or curve")
     prices = load_price_demand(d.start, d.end, d.region, d.raw_dir)
     ends = prices["interval_end"]
     folds = walk_forward_folds(ends.min(), ends.max(), cfg.validation, "dev")  # type: ignore[arg-type]
@@ -443,6 +445,19 @@ def battery_forecast(
                 frames.append(
                     threshold_dispatch(
                         test, plan, curve, spec, f"threshold_{method}", lookahead, horizons
+                    ).assign(fold_label=fold.label)
+                )
+            if "curve" in executions:
+                frames.append(
+                    threshold_dispatch(
+                        test,
+                        plan,
+                        curve,
+                        spec,
+                        f"curve_{method}",
+                        lookahead,
+                        horizons,
+                        offer="curve",
                     ).assign(fold_label=fold.label)
                 )
         typer.echo(f"{fold.label}: done in {time.time() - t0:.0f}s")

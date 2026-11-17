@@ -177,3 +177,49 @@ def test_threshold_only_reacts_to_price_against_historical_value(prices) -> None
     discharging = d["discharge_mw"] > 1e-6
     assert (d.loc[charging, "rrp"] < below).all()
     assert (d.loc[discharging, "rrp"] > above).all()
+
+
+# --- offer-curve execution (option B) ---------------------------------------------------------
+
+
+def test_offer_curve_is_physically_valid(prices) -> None:
+    d = threshold_dispatch(prices, oracle_plan(prices), flat_curve(60.0), SPEC, "b", offer="curve")
+    _check_valid(d)
+
+
+def test_offer_curve_decisions_do_not_depend_on_later_prices(prices) -> None:
+    plan = oracle_plan(prices)
+    base = threshold_dispatch(prices, plan, flat_curve(60.0), SPEC, "b", offer="curve")
+    cut = prices["interval_end"].iloc[2 * 288]
+    scrambled = prices.copy()
+    later = scrambled["interval_end"] > cut
+    scrambled.loc[later, "rrp"] = np.random.default_rng(2).normal(5000, 3000, later.sum())
+    alt = threshold_dispatch(scrambled, plan, flat_curve(60.0), SPEC, "b", offer="curve")
+    before = base["interval_end"] <= cut
+    np.testing.assert_array_equal(base.loc[before, "charge_mw"], alt.loc[before, "charge_mw"])
+    np.testing.assert_array_equal(base.loc[before, "discharge_mw"], alt.loc[before, "discharge_mw"])
+
+
+def test_offer_curve_gives_partial_quantities_unlike_full_power_thresholds(prices) -> None:
+    """The offer curve can trade less than full power when the plan's value of stored energy
+    changes with the charge level; the single-threshold rule only ever trades at full power or
+    up to a limit."""
+    plan = oracle_plan(prices)
+    curve_d = threshold_dispatch(prices, plan, flat_curve(60.0), SPEC, "b", offer="curve")
+    body = curve_d.iloc[:-48]
+    traded = (body["charge_mw"] + body["discharge_mw"]) > 1e-6
+    partial = traded & ((body["charge_mw"] + body["discharge_mw"]) < 100 - 1e-6)
+    assert partial.any()
+
+
+def test_offer_curve_requires_forecasts(prices) -> None:
+    with pytest.raises(ValueError):
+        threshold_dispatch(
+            prices,
+            None,
+            flat_curve(60.0),
+            SPEC,
+            "b",
+            climatology=climatology(prices),
+            offer="curve",
+        )
