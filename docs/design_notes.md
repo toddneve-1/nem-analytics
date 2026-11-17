@@ -596,6 +596,21 @@ midnights and fixed at 50 % only at the start and end of each test quarter. The 
 returns to 50 % each night anyway, so it is valid under both rule sets and unchanged. The daily
 rule set is kept as a comparison (`--mode daily`).
 
+*Naive schedule fix (after review).* The naive schedule was first built under the daily rule
+(50 % at midnight) even when evaluated continuously. Inspecting the Q1 2026 schedule showed the
+consequence: after the evening peak it refilled at about $81/MWh between 22:00 and 24:00 and sold
+that energy at about $88/MWh at 06:00–07:00, which loses money after round-trip losses ($88 × 0.9 ≈
+$79) even before wear. The trade was forced by the midnight rule, not chosen by the prices. Under
+continuous rules the naive schedule is now a **repeating daily cycle**: each day ends where it
+started, and the optimiser chooses that overnight level (`optimise(..., cyclic=True)`; if the
+cyclic LP overlaps at a negative price, the exact MILP is used, since these are single-day
+problems). The Q1 2026 schedule became one clean cycle (charge 11:25–13:15 at about $1/MWh,
+discharge 17:25–19:10 at about $170–180/MWh, overnight at minimum charge), and naive capture at
+$40/MWh rose from 33.9 % to 42.0 % (loss-making days 29.7 % → 16.7 %). Over a quarter the naive
+battery starts and ends at its own overnight level, so it gains no net energy, which keeps it
+comparable with perfect foresight's start and end at 50 %. Lesson: inspect what a benchmark
+actually does, not only its score; a weak benchmark flatters any model compared against it.
+
 *Wear cost of $40/MWh.* Derived as cost of replacing worn capacity ÷ lifetime energy delivered,
 with illustrative assumptions rather than market data: $200,000 per MWh of cells ÷ (6,000 cycles ×
 80 % usable depth) ≈ $40/MWh. Plausible inputs span roughly $20–60/MWh, so the sweep covers $0–60.
@@ -603,15 +618,15 @@ with illustrative assumptions rather than market data: $200,000 per MWh of cells
 | Wear cost | Strategy | Net revenue | Net $/MW-year | Capture vs perfect | Loss-making days | Cycles/day |
 |---|---|---|---|---|---|---|
 | $0 | Perfect foresight | $53.47 m | $213,995 | 100 % | 0.0 % | 4.80 |
-| $0 | Naive time-of-day | $22.04 m | $88,224 | 41.2 % | 7.0 % | 3.37 |
+| $0 | Naive time-of-day | $22.97 m | $91,911 | 43.0 % | 7.2 % | 3.10 |
 | $10 | Perfect foresight | $47.90 m | $191,724 | 100 % | 0.0 % | 3.10 |
-| $10 | Naive time-of-day | $18.75 m | $75,037 | 39.1 % | 14.7 % | 2.42 |
+| $10 | Naive time-of-day | $20.18 m | $80,780 | 42.1 % | 12.9 % | 2.13 |
 | $20 | Perfect foresight | $43.99 m | $176,052 | 100 % | 0.1 % | 2.37 |
-| $20 | Naive time-of-day | $16.28 m | $65,153 | 37.0 % | 21.3 % | 1.79 |
+| $20 | Naive time-of-day | $17.64 m | $70,596 | 40.1 % | 17.7 % | 1.71 |
 | **$40** | **Perfect foresight** | **$38.21 m** | **$152,938** | **100 %** | **0.2 %** | **1.68** |
-| **$40** | **Naive time-of-day** | **$12.94 m** | **$51,774** | **33.9 %** | **29.7 %** | **1.42** |
+| **$40** | **Naive time-of-day** | **$16.06 m** | **$64,273** | **42.0 %** | **16.7 %** | **0.96** |
 | $60 | Perfect foresight | $33.91 m | $135,717 | 100 % | 0.9 % | 1.31 |
-| $60 | Naive time-of-day | $7.90 m | $31,621 | 23.3 % | 42.0 % | 1.29 |
+| $60 | Naive time-of-day | $13.43 m | $53,744 | 39.6 % | 24.2 % | 0.95 |
 
 (912 development days, Jan 2024 – Jun 2026, continuous rule set. Net = market revenue minus wear
 cost. `nemspike battery --mode continuous --degradation-costs 0,10,20,40,60`.)
@@ -628,9 +643,13 @@ Talking points:
 - **At $40/MWh perfect foresight cycles 1.7 times a day**, in the range of real operation, against
   4.8 with no wear cost. Net revenue falls 29 % from $0 to $40: the trades removed were the thin
   ones.
-- **The naive schedule suffers most from wear cost** (capture 41 % at $0 → 34 % at $40 → 23 % at
-  $60, loss-making on 30 % of days at $40). A fixed schedule cannot skip days when the spread is
-  too small to pay for wear; this is where forecasts should add the most value.
+- **The naive schedule captures about 40–43 % at every wear cost** and still loses money on 17 %
+  of days at $40: a fixed schedule cannot skip days when the spread is too small to pay for wear.
+  This is where forecasts should add the most value.
+- **Naive capture is not monotone in wear cost** (42.1 % at $10, 40.1 % at $20, 42.0 % at $40).
+  The average-day schedule switches from about 1.7 to about 1 cycle a day between $20 and $40:
+  it drops a morning cycle that looks profitable on the *average* day but often lost money on real
+  days. A schedule optimised on averages can choose trades whose realised value is worse.
 - **Value is even more concentrated with realistic wear cost:** at $40 the 5 best days earn 31.7 %
   of perfect-foresight net revenue and the best 10 % of days 50.1 %.
 - A few perfect-foresight days are slightly negative under continuous operation (0.2 % at $40).

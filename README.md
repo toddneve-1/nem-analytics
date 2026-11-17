@@ -68,28 +68,29 @@ Outcomes over the 912 development days (Jan 2024 – Jun 2026), at $40/MWh wear 
 | Strategy | Net revenue | Per MW per year | Share of perfect foresight | Cycles per day |
 |---|---|---|---|---|
 | Perfect foresight (knows every price in advance) | $38.2 m | $153,000 | 100 % | 1.7 |
-| Naive (same daily schedule every day, from past averages) | $12.9 m | $52,000 | **34 %** | 1.4 |
+| Naive (same daily schedule every day, from past averages) | $16.1 m | $64,000 | **42 %** | 1.0 |
 
 How the wear cost changes the picture (net revenue, continuous operation):
 
 | Wear cost ($/MWh) | 0 | 10 | 20 | **40** | 60 |
 |---|---|---|---|---|---|
 | Perfect foresight | $53.5 m | $47.9 m | $44.0 m | **$38.2 m** | $33.9 m |
-| Naive share of perfect foresight | 41 % | 39 % | 37 % | **34 %** | 23 % |
+| Naive share of perfect foresight | 43 % | 42 % | 40 % | **42 %** | 40 % |
 | Perfect-foresight cycles per day | 4.8 | 3.1 | 2.4 | **1.7** | 1.3 |
 
 - **Battery value is concentrated in a few days.** At $40/MWh, the 5 best days earn 32 % of
   perfect-foresight revenue, and the best 10 % of days earn half of it. Missing spike days costs
   more than months of ordinary trading.
-- **A fixed daily routine captures about a third of the theoretical maximum** and loses money on
-  30 % of days: it cannot skip days when the price spread is too small to pay for wear.
+- **A fixed daily routine ("charge in the midday solar trough, discharge in the evening peak")
+  captures about 40 % of the theoretical maximum** and still loses money on 17 % of days: it cannot
+  skip days when the price spread is too small to pay for wear.
 - **Realistic wear costs bring cycling into a realistic range:** perfect foresight cycles 4.8 times
   a day with no wear cost but 1.7 times at $40/MWh.
 - **Running continuously is worth 1.5–4.7 % more than resetting to 50 % every midnight,** and more
   as wear costs rise, because holding energy overnight for a better opportunity becomes relatively
   more valuable.
 - **Next:** a battery driven by the forecasts above, re-planning every 30 minutes, to measure how
-  much of the gap between 34 % and 100 % the forecasts can close.
+  much of the gap between 42 % and 100 % the forecasts can close.
 
 More detail will be added as the analysis progresses. Design decisions, all results and their
 limitations are recorded in [`docs/design_notes.md`](docs/design_notes.md).
