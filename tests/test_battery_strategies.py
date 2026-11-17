@@ -190,3 +190,21 @@ def test_summary_reports_difference_from_baseline_with_interval(prices: pd.DataF
     assert naive["capture_vs_perfect_ci_low"] <= naive["capture_vs_perfect"]
     assert naive["capture_vs_perfect"] <= naive["capture_vs_perfect_ci_high"]
     assert pf["net_vs_naive_time_of_day_share_days_ahead"] == 1.0
+
+
+def test_capture_on_best_days_uses_the_reference_best_days() -> None:
+    from nemspike.battery.strategies import capture_on_best_days
+
+    days = pd.date_range("2024-01-01", periods=30).date
+    pf = np.arange(30, dtype=float)  # best days are the last ten
+    strat = np.where(np.arange(30) >= 20, pf / 2, 100.0)  # half on best days, a lot elsewhere
+    daily = pd.DataFrame(
+        {
+            "nem_day": np.concatenate([days, days]),
+            "strategy": ["perfect_foresight"] * 30 + ["s"] * 30,
+            "net_revenue": np.concatenate([pf, strat]),
+        }
+    )
+    cap = capture_on_best_days(daily, n_days=10)
+    assert cap["perfect_foresight"] == pytest.approx(1.0)
+    assert cap["s"] == pytest.approx(0.5)

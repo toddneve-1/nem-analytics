@@ -252,6 +252,21 @@ def capture_bootstrap(
     return _interval(num / den)
 
 
+def capture_on_best_days(
+    daily: pd.DataFrame, n_days: int = 10, reference: str = "perfect_foresight"
+) -> pd.Series:
+    """Each strategy's net revenue on the ``n_days`` best perfect-foresight days, as a share of
+    perfect foresight's revenue on those days.
+
+    Pre-declared measure (chosen before the threshold and recalibration experiments were run):
+    battery value is concentrated in a few extreme days, so this checks directly whether a
+    strategy captures them, rather than relying on totals that a couple of days can swing.
+    """
+    wide = _daily_net(daily, sorted(daily["strategy"].unique()))
+    best = wide[reference].nlargest(n_days).index
+    return wide.loc[best].sum() / wide.loc[best, reference].sum()
+
+
 def summarise_strategies(
     daily: pd.DataFrame,
     spec: BatterySpec,
@@ -288,6 +303,7 @@ def summarise_strategies(
     out["net_per_mw_year"] = out["net_per_day"] * 365 / spec.power_mw
     if "perfect_foresight" in out.index:
         out["capture_vs_perfect"] = out["net_revenue"] / out.loc["perfect_foresight", "net_revenue"]
+        out["capture_best10"] = capture_on_best_days(daily, n_days=10)
     if baseline is not None and "perfect_foresight" in out.index:
         others = [name for name in out.index if name != "perfect_foresight"]
         for name in others:
