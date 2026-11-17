@@ -38,10 +38,12 @@ def _lp_with_duals(
     soc_end: float | None,
     charge_cap: np.ndarray,
     discharge_cap: np.ndarray,
+    terminal_value: float = 0.0,
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray, float]:
     """Solve the LP with per-interval power caps. Returns charge, discharge, duals, revenue."""
     n, eta, dt, k = len(p), spec.eta_one_way, DT_HOURS, spec.degradation_cost_per_mwh
     cost = np.concatenate([p * dt, (-p + k) * dt, np.zeros(n)])
+    cost[-1] -= terminal_value  # credit for energy still stored at the end
     eye = sparse.identity(n, format="csr")
     shift = sparse.diags([np.ones(n - 1)], [-1], shape=(n, n), format="csr")
     a_eq = sparse.hstack([-eta * dt * eye, (dt / eta) * eye, eye - shift], format="csr")
@@ -64,8 +66,12 @@ def storage_values(
     soc_start: float | None = None,
     soc_end: float | None = None,
     max_rounds: int = 10,
+    terminal_value: float = 0.0,
 ) -> np.ndarray:
-    """Marginal value ($/MWh) of one extra MWh of storage at each interval (see module notes)."""
+    """Marginal value ($/MWh) of one extra MWh of storage at each interval (see module notes).
+
+    ``terminal_value`` credits energy left at the end (rolling-horizon planning windows).
+    """
     p = np.asarray(prices, dtype=float)
     n = len(p)
     s0 = spec.soc_initial_mwh if soc_start is None else soc_start
@@ -73,12 +79,21 @@ def storage_values(
     discharge_cap = np.full(n, spec.power_mw)
     exact = None
     for _ in range(max_rounds):
-        c, d, duals, _ = _lp_with_duals(p, spec, s0, soc_end, charge_cap, discharge_cap)
+        c, d, duals, _ = _lp_with_duals(
+            p, spec, s0, soc_end, charge_cap, discharge_cap, terminal_value
+        )
         overlap = (c > OVERLAP_TOL) & (d > OVERLAP_TOL) & (p < 0)
         if not overlap.any():
             return duals
         if exact is None:
-            exact = optimise(p, spec, soc_start=s0, soc_end=soc_end, method="hybrid")
+            exact = optimise(
+                p,
+                spec,
+                soc_start=s0,
+                soc_end=soc_end,
+                method="hybrid",
+                terminal_value=terminal_value,
+            )
         # Keep the direction the exact solution uses (charging at a negative price if idle).
         uses_discharge = exact.discharge_mw > OVERLAP_TOL
         charge_cap[overlap & uses_discharge] = 0.0

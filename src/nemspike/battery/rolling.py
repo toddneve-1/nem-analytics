@@ -103,3 +103,102 @@ def rolling_dispatch(
         soc = float(plan.soc_mwh[k - 1])
 
     return _record(p, Dispatch(charge, discharge, soc_path), strategy)
+
+
+# --- threshold execution ---------------------------------------------------------------------
+
+
+def execution_thresholds(value: float, spec: BatterySpec) -> tuple[float, float]:
+    """Price thresholds implied by a marginal value of stored energy ``value`` ($/MWh stored).
+
+    Discharging one MWh to the grid earns ``p - wear`` and uses ``1 / eta`` MWh of storage;
+    charging one MWh from the grid costs ``p`` and adds ``eta`` MWh. So: discharge if
+    ``p > value / eta + wear``; charge if ``p < value * eta``; otherwise idle.
+    """
+    eta = spec.eta_one_way
+    return value * eta, value / eta + spec.degradation_cost_per_mwh
+
+
+def _execute(price: float, soc: float, charge_below: float, discharge_above: float, spec):
+    """Full-power action for one interval at the realised price, within state-of-charge limits."""
+    eta, dt = spec.eta_one_way, 5 / 60
+    if price > discharge_above:
+        d = min(spec.power_mw, max(soc - spec.soc_min_mwh, 0.0) * eta / dt)
+        return 0.0, d, soc - d * dt / eta
+    if price < charge_below:
+        c = min(spec.power_mw, max(spec.soc_max_mwh - soc, 0.0) / (eta * dt))
+        return c, 0.0, soc + eta * c * dt
+    return 0.0, 0.0, soc
+
+
+def threshold_dispatch(
+    test_prices: pd.DataFrame,
+    plan_prices: pd.DataFrame | None,
+    curve: pd.Series,
+    spec: BatterySpec,
+    strategy: str,
+    lookahead: int = 48,
+    horizons: tuple[int, ...] = DEFAULT_HORIZONS,
+    climatology: pd.Series | None = None,
+) -> pd.DataFrame:
+    """Re-plan every 5 minutes and execute by price threshold.
+
+    At each origin T (every interval):
+
+    * With ``plan_prices`` (forecast-driven): plan the next ``lookahead`` intervals on the
+      forecast planning prices, crediting leftover energy at the water value for the window's
+      end, and take the marginal value of stored energy after the first interval (the LP dual).
+    * Without (threshold-only benchmark): take the marginal value from the historical
+      water-value ``curve`` for that interval. No forecasts.
+
+    The interval is then executed by comparing the realised 5-minute price with the thresholds
+    from :func:`execution_thresholds` (full power, within limits). This mirrors offering energy
+    in price bands before the interval: under the price-taker assumption, a price-contingent offer
+    is equivalent to acting on the price once it is set, so no forecast of the executed interval
+    is needed. Simplification: the whole interval runs at full power, using the marginal value at
+    the current state of charge (a real offer stack would use several bands).
+
+    Once the period's end is within ``lookahead`` intervals, the strategy follows a plan that
+    must end at the initial state of charge (planning prices: the forecasts, or ``climatology``
+    for the threshold-only benchmark), the same end rule as every other strategy.
+    """
+    from nemspike.battery.water_value import storage_values
+
+    p = _full_days(add_nem_day(test_prices)).reset_index(drop=True)
+    steps = p["interval_end"].diff().dropna()
+    if not (steps == INTERVAL).all():
+        raise ValueError("threshold dispatch needs an unbroken 5-minute price series")
+    if plan_prices is None and climatology is None:
+        raise ValueError("the threshold-only benchmark needs a climatology for the period's end")
+    n = len(p)
+    ends = p["interval_end"]
+    actual = p["rrp"].to_numpy()
+    curve_now = lookup_value(curve, ends)  # historical marginal value per interval
+    slots = p["slot"].to_numpy()
+    charge, discharge, soc_path = np.zeros(n), np.zeros(n), np.zeros(n)
+    soc = spec.soc_initial_mwh
+
+    for i in range(n):
+        window = min(lookahead, n - i)
+        if plan_prices is not None:
+            origin = ends.iloc[i] - INTERVAL
+            if origin not in plan_prices.index:
+                raise KeyError(f"no forecasts for origin {origin}")
+            path = plan_price_path(plan_prices.loc[origin], window, horizons)
+        else:
+            path = climatology.reindex(slots[i : i + window]).to_numpy(dtype=float)
+
+        if i + window == n:  # the period's end is in view: follow a plan that ends at the start
+            plan = optimise(path, spec, soc_start=soc, soc_end=spec.soc_initial_mwh)
+            charge[i], discharge[i], soc = plan.charge_mw[0], plan.discharge_mw[0], plan.soc_mwh[0]
+        else:
+            if plan_prices is not None:
+                terminal = float(lookup_value(curve, ends.iloc[[i + window - 1]])[0])
+                value = float(storage_values(path, spec, soc_start=soc, terminal_value=terminal)[0])
+            else:
+                value = float(curve_now[i])
+            below, above = execution_thresholds(value, spec)
+            charge[i], discharge[i], soc = _execute(actual[i], soc, below, above, spec)
+        soc_path[i] = soc
+
+    return _record(p, Dispatch(charge, discharge, soc_path), strategy)
