@@ -45,3 +45,33 @@ def test_expected_price_dispatch_and_errors() -> None:
         expected_price(q, "learned")
     with pytest.raises(ValueError):
         expected_price(q, "nope")  # type: ignore[arg-type]
+
+
+def test_recalibration_lifts_high_risk_forecasts_and_stays_monotone() -> None:
+    """Simulate under-predicted spikes: when the spike probability is high, realised prices are
+    far above the expected price. The recalibration should learn that, monotonically."""
+    from nemspike.battery.expected_price import SpikeRecalibration
+
+    rng = np.random.default_rng(0)
+    n = 40_000
+    e = rng.uniform(0, 300, n)
+    p = np.where(rng.random(n) < 0.1, rng.uniform(0.4, 0.9, n), rng.uniform(0.0, 0.04, n))
+    y = e + np.where(p > 0.35, 2000 * p, 0.0) + rng.normal(0, 20, n)
+    rec = SpikeRecalibration().fit(e, p, y)
+    grid = np.linspace(0, 300, 7)
+    low, high = rec.predict(grid, np.full(7, 0.01)), rec.predict(grid, np.full(7, 0.6))
+    assert (np.diff(low) >= -1e-9).all() and (np.diff(high) >= -1e-9).all()
+    assert (high - low).mean() > 900  # high-risk forecasts lifted by about 2000 x 0.6
+    assert np.abs(low - grid).mean() < 25  # low-risk forecasts barely changed
+
+
+def test_recalibration_merges_sparse_buckets() -> None:
+    from nemspike.battery.expected_price import SpikeRecalibration
+
+    rng = np.random.default_rng(1)
+    e = rng.uniform(0, 100, 2000)
+    p = np.full(2000, 0.01)
+    p[:50] = 0.5  # only 50 rows in the top bucket: merged with the one below
+    rec = SpikeRecalibration(min_rows=500).fit(e, p, e)
+    assert rec.bucket_map[3] == rec.bucket_map[2] == rec.bucket_map[1] == 0
+    np.testing.assert_allclose(rec.predict(e[:10], p[:10]), e[:10], atol=5)

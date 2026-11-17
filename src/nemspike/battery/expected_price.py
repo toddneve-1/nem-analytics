@@ -10,6 +10,8 @@ comparison of methods. Implemented here:
   position of outcomes inside each interior band, and the average excess beyond q0.1 and q0.99.
 * ``linear`` (method a): each band's mean is its midpoint; tails taken at q0.1 and q0.99.
 * ``median``: q0.5, for comparison (biased low for right-skewed prices).
+* ``recalibrated``: the learned expected price mapped through :class:`SpikeRecalibration`, which
+  uses the spike probability to correct the under-prediction of high prices.
 """
 
 from __future__ import annotations
@@ -21,7 +23,7 @@ import numpy as np
 import pandas as pd
 
 QUANTILE_COLUMNS = ["q0.1", "q0.5", "q0.9", "q0.99"]
-PriceMethod = Literal["learned", "linear", "median"]
+PriceMethod = Literal["learned", "linear", "median", "recalibrated"]
 
 
 def linear_expected(q: np.ndarray) -> np.ndarray:
@@ -70,8 +72,10 @@ def expected_price(
     quantiles: pd.DataFrame | np.ndarray,
     method: PriceMethod,
     learned: LearnedBands | None = None,
+    recalibration: SpikeRecalibration | None = None,
+    spike_prob: np.ndarray | None = None,
 ) -> np.ndarray:
-    """Planning price per row from its quantile forecasts."""
+    """Planning price per row from its quantile forecasts (and spike probability if needed)."""
     q = quantiles[QUANTILE_COLUMNS].to_numpy() if isinstance(quantiles, pd.DataFrame) else quantiles
     if method == "median":
         return np.asarray(q[:, 1], float)
@@ -81,4 +85,68 @@ def expected_price(
         if learned is None:
             raise ValueError("the learned method needs fitted LearnedBands")
         return learned.expected(q)
+    if method == "recalibrated":
+        if learned is None or recalibration is None or spike_prob is None:
+            raise ValueError("recalibrated needs LearnedBands, SpikeRecalibration and spike_prob")
+        return recalibration.predict(learned.expected(q), spike_prob)
     raise ValueError(f"unknown price method {method!r}")
+
+
+# --- recalibration using the spike probability ------------------------------------------------
+
+SPIKE_BUCKET_EDGES = (0.0, 0.05, 0.15, 0.35, 1.0)
+
+
+@dataclass
+class SpikeRecalibration:
+    """Map (expected price, spike probability) to the realised average price, learned from
+    earlier out-of-sample forecasts.
+
+    Expected prices built from the quantiles under-predict high prices (calibration slopes of
+    1.3-1.5; design notes 9.2), and the spike classifier's probability carries information the
+    quantiles miss. Within each spike-probability bucket an isotonic (monotone increasing)
+    regression of the realised price on the expected price gives the recalibrated planning price.
+    Buckets with fewer than ``min_rows`` earlier forecasts are merged into the one below.
+    """
+
+    edges: tuple[float, ...] = SPIKE_BUCKET_EDGES
+    min_rows: int = 500
+    models: dict[int, object] = field(default_factory=dict)
+    bucket_map: dict[int, int] = field(default_factory=dict)
+
+    def _bucket(self, spike_prob: np.ndarray) -> np.ndarray:
+        inner = np.asarray(self.edges[1:-1])
+        return np.searchsorted(inner, np.asarray(spike_prob, float), side="right")
+
+    def fit(
+        self, expected: np.ndarray, spike_prob: np.ndarray, actual: np.ndarray
+    ) -> SpikeRecalibration:
+        from sklearn.isotonic import IsotonicRegression
+
+        e, y = np.asarray(expected, float), np.asarray(actual, float)
+        b = self._bucket(spike_prob)
+        n_buckets = len(self.edges) - 1
+        # Merge sparse buckets downwards (bucket 0, the most populous, always stands alone).
+        target = list(range(n_buckets))
+        for k in range(1, n_buckets):
+            if np.sum(b == k) < self.min_rows:
+                target[k] = target[k - 1]
+        self.bucket_map = dict(enumerate(target))
+        merged = np.vectorize(self.bucket_map.get)(b)
+        for k in sorted(set(target)):
+            m = merged == k
+            iso = IsotonicRegression(increasing=True, out_of_bounds="clip")
+            self.models[k] = iso.fit(e[m], y[m])
+        return self
+
+    def predict(self, expected: np.ndarray, spike_prob: np.ndarray) -> np.ndarray:
+        if not self.models:
+            raise RuntimeError("fit() must be called before predict()")
+        e = np.asarray(expected, float)
+        merged = np.vectorize(self.bucket_map.get)(self._bucket(spike_prob))
+        out = np.empty_like(e)
+        for k, model in self.models.items():
+            m = merged == k
+            if m.any():
+                out[m] = model.predict(e[m])  # type: ignore[attr-defined]
+        return out
