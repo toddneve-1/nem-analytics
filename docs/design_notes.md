@@ -951,6 +951,54 @@ Findings:
 - **Caveat:** these are development-fold results. Option B was designed after seeing 9.3–9.4 (but
   not its own results); the holdout remains the confirmation.
 
+### 9.6 Ladder step 2: short horizons, block-mean targets and a fine planning grid
+
+**What changed.**
+- **Short-horizon point forecasts** at 5, 10, 15, 20 and 25 minutes (`backtest --horizons
+  5,10,15,20,25`), so each 5-minute interval of the next half hour has its own forecast.
+- **Block-mean targets** for 60–240 minutes (`backtest --target block_mean`): the model learns the
+  *average* price of the 30-minute block ending at T + h, which is how the plan uses it, instead of
+  the price of that block's last interval only. Saved separately (`h<minutes>_block`). The block
+  lies wholly after T, and the future-perturbation leakage test passes with this target.
+- **Fine planning grid** (`battery-forecast --plan-grid fine`): one planning price per 5-minute
+  interval: point forecasts at 5–30 minutes, block-mean forecasts beyond.
+
+**Forecast accuracy.**
+- Block-mean models are modestly better at what the plan needs: against the realised block mean,
+  MAE 25.65 against 26.85 for the point model at 1 hour, 32.06 against 32.95 at 2 hours, 39.00
+  against 39.57 at 4 hours.
+- **Short-horizon weakness found:** at 5–25 minutes LightGBM is *worse than persistence* on MAE
+  and pinball (5 min: MAE 19.36 against 13.69; 25 min: 24.59 against 23.29), though far better on
+  spikes (PR-AUC 0.81 against 0.60 at 5 minutes). Very short-term prices are mostly "current price
+  plus a small change"; trees approximate that identity as coarse steps across a very wide price
+  range. Candidate fix, for development folds: predict the *change* from the current price.
+
+**Battery results** (same 821 days; coarse = 30-minute blocks from 9.4/9.5):
+
+| Execution and price | Grid | Capture (interval) | Best-10-days | Loss-making days | Total vs naive, $m (interval) | Days ahead | Median daily gap, $k (interval) |
+|---|---|---|---|---|---|---|---|
+| Plan-following, learned | coarse | 47.1 % (41.1–54.0) | 35.5 % | 9.4 % | +0.35 (−3.15 to +2.82) | 61 % | +2.2 (+1.1 to +2.9) |
+| Plan-following, learned | fine | 50.9 % (45.3–56.9) | 43.0 % | 10.2 % | +1.62 (−0.88 to +3.33) | 65 % | +2.3 (+1.4 to +3.3) |
+| Offer curve, learned | coarse | 55.7 % (50.4–62.1) | 46.7 % | 7.7 % | +3.21 (+1.34 to +4.82) | 70 % | +3.7 (+3.0 to +4.6) |
+| Offer curve, learned | fine | 55.5 % (49.9–61.6) | 50.2 % | 8.7 % | +3.15 (+1.53 to +4.55) | 68 % | +3.3 (+2.6 to +4.3) |
+| Offer curve, recalibrated | coarse | 57.4 % (52.2–63.0) | 57.9 % | 9.7 % | +3.77 (+2.42 to +5.20) | 69 % | +3.6 (+2.7 to +4.6) |
+| Offer curve, recalibrated | fine | 56.6 % (51.9–61.8) | 60.1 % | 10.7 % | +3.51 (+2.12 to +5.02) | 68 % | +3.3 (+2.6 to +4.2) |
+| Naive daily schedule | – | 46.0 % (40.5–51.2) | 54.0 % | 17.7 % | – | – | – |
+
+(`reports/metrics/dev/battery_summary_fine_deg40.csv`.)
+
+Findings:
+- **Step 2 helps plan-following** (47 % → 51 % capture, best-10-days 35 % → 43 %, 2025 Q2 36 % →
+  47 %), because that execution relies on the forecast for the half hour it carries out. Its
+  advantage over naive on total is still not distinguishable from zero.
+- **Step 2 adds nothing to offer-curve execution** (55.7 % → 55.5 %; every interval overlaps):
+  the offer curve already uses the realised price for the executed interval, so better forecasts
+  of the next few intervals are second-order, as the review anticipated. The 5–25-minute forecasts
+  are also currently worse than persistence, which limits what they could add.
+- **Current best design on development folds: offer-curve execution with the learned price on
+  the coarse grid**: simplest, no extra models, and distinguishable from naive on every measure.
+  The recalibrated price is marginally higher on totals but unstable across quarters (9.4–9.5).
+
 ---
 
 ## Planned extensions (after the core pipeline)
