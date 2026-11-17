@@ -13,6 +13,14 @@ investigate what those prices are worth to **a hypothetical grid battery**.
 
 ### Price forecasting
 
+**Model:** LightGBM gradient-boosted decision trees, one model per forecast horizon. Quantile
+regression gives the price range (on an asinh-transformed price, which tames the heavy tail and
+handles negative prices), and a separate classifier gives the spike probability. Inputs are 74
+features known at forecast time: recent prices and demand, calendar, sun position and weather.
+Gradient boosting suits this tabular, mixed-feature problem with strong non-linear interactions
+(for example time of day × recent volatility × temperature), retrains in about a minute per
+fold, and has built-in quantile and classification objectives.
+
 Models are evaluated walk-forward: train on everything up to a quarter, forecast that quarter,
 roll forward. Ten quarters (Jan 2024 – Jun 2026, about 262,000 forecasts per horizon) are used for
 development; Jul–Oct 2026 is held back as an untouched final test.
@@ -49,56 +57,59 @@ horizon, with typical error 15 % lower at 1 hour and 37 % lower at 4 hours.
 | Round-trip efficiency | 90 % |
 | State-of-charge range | 10 %–90 % (160 MWh usable) |
 | Operation | Continuous: charge carried overnight; 50 % at the start and end of each quarter |
-| Degradation (wear) cost | $40 per MWh discharged (sensitivity $0–60) |
+| Degradation (wear) cost | $40 per MWh discharged ($0–60 sensitivity in the design notes) |
 
 Key assumptions (amongst others):
-- **Wear cost:** cost of replacing worn capacity ÷ lifetime energy delivered, using illustrative
-  figures ($200,000 per MWh of cells ÷ (6,000 cycles × 80 % usable depth) ≈ $40/MWh). Results are
-  also shown from $0 to $60.
-- **Price taker:** the battery's own dispatch does not move the price.
-- **Energy arbitrage only:** no frequency control (FCAS) revenue, which in practice is a major
-  income stream for batteries.
-- **Simplified physics and grid:** constant efficiency, a linear wear cost, no network constraints
-  or marginal loss factors; settled at the 5-minute regional price.
-- **No simultaneous charging and discharging.** Without this rule, an optimiser exploits negative
-  prices by doing both at once to "burn" energy through losses, which a real battery cannot do.
-- **Forecast-driven battery plans on the expected price, not the median (risk-neutral).** Revenue
-  is price × energy, so over many trades the average revenue depends on the *average* (expected)
-  price. The median ignores the spike tail and, on our forecasts, sits $9–12/MWh below the
-  realised average, which would make the battery systematically undervalue high-price periods.
-  The expected price is built from the quantile forecasts using band probabilities and positions
-  learned from earlier forecasts (method details and the comparison of four alternatives are in
-  the design notes, section 9.2). Planning on the expected price assumes a risk-neutral operator:
-  it does not penalise the chance of a bad outcome, as a risk-averse trader might.
+- **Wear cost:** replacement cost of worn capacity ÷ lifetime energy delivered, using illustrative
+  figures ($200,000 per MWh of cells ÷ (6,000 cycles × 80 % usable depth) ≈ $40/MWh).
+- **Price taker, energy arbitrage only:** the battery does not move the price, and earns no
+  frequency control (FCAS) revenue.
+- **Simplified physics and grid:** constant efficiency, linear wear cost, no network constraints
+  or loss factors; settled at the 5-minute regional price.
+- **Forecast-driven battery plans on the expected price, not the median** (risk-neutral). Revenue
+  is price × energy, so average revenue depends on the average price; the median ignores the
+  spike tail and sits $9–12/MWh below realised prices on our forecasts.
 
-Outcomes over the 912 development days (Jan 2024 – Jun 2026), at $40/MWh wear cost:
+Strategies compared:
+- **Perfect foresight:** knows every actual price in advance. The theoretical maximum.
+- **Forecast-driven:** every 30 minutes, plans the next 4 hours on the forecast expected price,
+  carries out the first 30 minutes, then re-plans. Energy left at the end of each plan is valued
+  using a "water value" curve: the typical marginal value of stored energy by time of day,
+  weekday versus weekend, learned from earlier data.
+- **Naive:** the same daily schedule every day (charge in the midday solar trough, discharge in
+  the evening peak), optimised on past average prices.
 
-| Strategy | Net revenue | Per MW per year | Share of perfect foresight | Cycles per day |
+Outcomes over 821 development days (Apr 2024 – Jun 2026), at $40/MWh wear cost:
+
+| Strategy | Net revenue | Per MW per year | Share of perfect foresight | Loss-making days |
 |---|---|---|---|---|
-| Perfect foresight (knows every price in advance) | $38.2 m | $153,000 | 100 % | 1.7 |
-| Naive (same daily schedule every day, from past averages) | $16.1 m | $64,000 | **42 %** | 1.0 |
+| Perfect foresight | $33.1 m | $147,000 | 100 % | < 1 % |
+| **Forecast-driven** | **$15.6 m** | **$69,000** | **47 %** | **9 %** |
+| Naive daily schedule | $15.2 m | $68,000 | 46 % | 18 % |
 
-How the wear cost changes the picture (net revenue, continuous operation):
+**Summary.** The forecast-driven battery generally outperformed the naive schedule: it did better
+in 8 of 9 quarters (often by 10–17 percentage points of perfect foresight), on 61 % of individual
+days, and halved the number of loss-making days. But on two extreme days in June 2025, with
+prices up to about $15,000/MWh, it lost about $2.2 m relative to naive. Excluding just those two
+days, it was $2.5 m ahead over the period; including them, only $0.35 m.
 
-| Wear cost ($/MWh) | 0 | 10 | 20 | **40** | 60 |
-|---|---|---|---|---|---|
-| Perfect foresight | $53.5 m | $47.9 m | $44.0 m | **$38.2 m** | $33.9 m |
-| Naive share of perfect foresight | 43 % | 42 % | 40 % | **42 %** | 40 % |
-| Perfect-foresight cycles per day | 4.8 | 3.1 | 2.4 | **1.7** | 1.3 |
+**Why.** On 26 June 2025, prices were already $180–400 at midday and reached $3,900–14,000 from
+17:00 to 20:30. The forecasts saw an ordinary expensive afternoon: the 4-hour-ahead forecast for
+17:00 had a median of $304 and a 99th percentile of about $2,000, against an actual $9,656. So the
+battery made small trades around $300 and was empty when the spike arrived. The naive schedule
+charged at midday regardless of price and happened to discharge into the spike. The spike
+classifier *did* flag the risk (43 % probability at 13:00), but the battery does not yet use it.
 
-- **Battery value is concentrated in a few days.** At $40/MWh, the 5 best days earn 32 % of
-  perfect-foresight revenue, and the best 10 % of days earn half of it. Missing spike days costs
-  more than months of ordinary trading.
-- **A fixed daily routine ("charge in the midday solar trough, discharge in the evening peak")
-  captures about 40 % of the theoretical maximum** and still loses money on 17 % of days: it cannot
-  skip days when the price spread is too small to pay for wear.
-- **Realistic wear costs bring cycling into a realistic range:** perfect foresight cycles 4.8 times
-  a day with no wear cost but 1.7 times at $40/MWh.
-- **Running continuously is worth 1.5–4.7 % more than resetting to 50 % every midnight,** and more
-  as wear costs rise, because holding energy overnight for a better opportunity becomes relatively
-  more valuable.
-- **Next:** a battery driven by the forecasts above, re-planning every 30 minutes, to measure how
-  much of the gap between 42 % and 100 % the forecasts can close.
+**What could fix it (to be tested):**
+1. Raise the value of stored energy when the forecast spike probability over the next few hours
+   is high, so the battery holds charge on risky afternoons.
+2. Add the spike probability × typical spike size to the planning price.
+3. A simple reserve rule: keep at least a minimum charge whenever spike risk is high.
+4. Better forecasts of spike *size* (the model sees the risk but badly under-estimates magnitude).
+
+Battery value is concentrated in a few days: the 5 best days earn 30 % of perfect-foresight
+revenue, and the best 10 % of days almost half. Getting the extreme days right matters more than
+anything else.
 
 More detail will be added as the analysis progresses. Design decisions, all results and their
 limitations are recorded in [`docs/design_notes.md`](docs/design_notes.md).
@@ -114,13 +125,6 @@ Data is not committed to this repository. It is downloaded from the original sou
 locally as parquet (see *Quick start*).
 
 ### What the data looks like
-
-Demand has a clean yearly cycle, peaking in winter (heating) at about 5,900–6,400 MW on a monthly
-average basis. Demand alone does not explain price: winter 2025 demand was similar to winter
-2024, yet June 2025 averaged $265/MWh, the dearest month in the data, driven by a small number of
-very high-priced intervals.
-
-![VIC1 average operational demand by month](reports/figures/demand_monthly.png)
 
 The price distribution is the core of the problem. It has several peaks rather than one bell
 curve: a sharp peak just above zero (the $5–$10 bucket alone holds 6.5 % of intervals), a cluster
@@ -161,6 +165,10 @@ uv run nemspike backtest --models baselines,lgbm_asinh,lgbm_none
 
 ```bash
 uv run nemspike battery --degradation-costs 0,10,20,40,60
+```
+
+```bash
+uv run nemspike battery-forecast
 ```
 
 ```bash
