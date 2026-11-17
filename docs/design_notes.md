@@ -906,6 +906,51 @@ Findings:
   recalibration) should be chosen on development folds with these same pre-declared measures, and
   will need the holdout to confirm.
 
+### 9.5 Option B: offer-curve execution
+
+**Idea.** Threshold execution (9.4) over-traded because every action was all-or-nothing around a
+single marginal value. Instead, each interval is executed as the plan's **optimal response to the
+realised price**: re-optimise the 4-hour window with the first interval's price set to the
+realised price and carry out that plan's first action. The response is a fixed function of the
+price, determined by the forecasts and state of charge at the origin, so it is equivalent to
+submitting a complete price-quantity offer curve before the interval (valid under the price-taker
+assumption). Quantities follow the plan's own value of stored energy at different charge levels,
+so small price excursions give small trades; it adds **no tunable parameter**, so it cannot be
+fitted to particular days. It was chosen before its results were seen.
+
+**Results** (same 821 days, $40/MWh wear; `--execution curve --tag curve`; 95 % block-bootstrap
+intervals; perfect foresight identical to 9.4):
+
+| Strategy | Capture (interval) | Best-10-days capture | Loss-making days | Cycles/day | Total vs naive, $m (interval) | Days ahead (interval) | Median daily gap, $k (interval) |
+|---|---|---|---|---|---|---|---|
+| Plan-following, learned | 47.1 % (41.1–54.0) | 35.5 % | 9.4 % | 1.14 | +0.35 (−3.15 to +2.82) | 61 % (57–65) | +2.2 (+1.1 to +2.9) |
+| Threshold, learned | 46.2 % (42.3–50.6) | 45.9 % | 20.7 % | 1.98 | +0.06 (−1.85 to +1.66) | 51 % (46–55) | +0.1 (−0.7 to +0.8) |
+| **Offer curve, learned** | **55.7 % (50.4–62.1)** | **46.7 %** | **7.7 %** | **1.31** | **+3.21 (+1.34 to +4.82)** | **70 % (66–74)** | **+3.7 (+3.0 to +4.6)** |
+| Offer curve, recalibrated | 57.4 % (52.2–63.0) | 57.9 % | 9.7 % | 1.42 | +3.77 (+2.42 to +5.20) | 69 % (65–74) | +3.6 (+2.7 to +4.6) |
+| Naive daily schedule | 46.0 % (40.5–51.2) | 54.0 % | 17.7 % | 0.96 | – | – | – |
+
+Capture by quarter (%), offer curve learned / recalibrated / naive: 2024 Q2 63.7 / 26.0 / 41.1;
+Q3 52.0 / 55.2 / 47.2; Q4 59.7 / 70.0 / 37.9; 2025 Q1 67.6 / 69.5 / 33.9; Q2 53.6 / 64.4 / 59.2;
+Q3 60.3 / 62.9 / 54.8; Q4 54.2 / 60.4 / 35.8; 2026 Q1 44.6 / 54.0 / 34.3; Q2 26.2 / 32.1 / 12.7.
+
+Findings:
+- **First strategy whose advantage over naive is distinguishable on every measure:** total
+  (interval +$1.3 m to +$4.8 m), share of days ahead (66–74 %) and median daily gap. It beats
+  naive in 8 of 9 quarters with the learned price (the exception, 2025 Q2, is close: 53.6 % against
+  59.2 %), and captures 56 % of perfect foresight against 47 % for plan-following.
+- **It keeps the strengths of both earlier executions:** extreme-day capture like threshold
+  execution (best-10-days 47 %, up from 36 %) and few loss-making days like plan-following (8 %,
+  fewer than any other strategy), with moderate cycling (1.3 a day).
+- **Why it works:** the realised price enters the decision, as with thresholds, but the quantity
+  comes from the plan's whole value function rather than a single slope, so the battery trades
+  hard only when the price is far from what the rest of the window makes energy worth.
+- **Recalibration adds a little on totals and best days but is unstable** (2024 Q2: 26 % against
+  64 % with the learned price, fitted on one quarter of history) and its price accuracy is much
+  worse (9.4). The learned price is the more defensible default; the recalibrated variant is
+  kept as a sensitivity.
+- **Caveat:** these are development-fold results. Option B was designed after seeing 9.3–9.4 (but
+  not its own results); the holdout remains the confirmation.
+
 ---
 
 ## Planned extensions (after the core pipeline)
