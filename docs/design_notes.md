@@ -753,6 +753,58 @@ Findings:
 - **RMSE barely improves on the median** (about 4 % at 30 minutes, under 1 % at 4 hours). RMSE is
   dominated by a few extreme intervals that no method predicts.
 
+### 9.3 First forecast-driven results (water value, $40/MWh wear, continuous)
+
+`nemspike battery-forecast`: rolling 4-hour plans every 30 minutes; leftover energy valued with
+the weekday/weekend water-value curve learned from earlier data; development folds 1–9 (Apr 2024 –
+Jun 2026, 821 days; fold 0 is excluded because the learned planning price needs earlier forecasts).
+Benchmarks are evaluated on the same days.
+
+| Strategy | Net revenue | Net $/MW-year | Capture vs perfect | Loss-making days | Cycles/day |
+|---|---|---|---|---|---|
+| Perfect foresight | $33.06 m | $146,994 | 100 % | 0.2 % | 1.69 |
+| Forecast, median price | $15.76 m | $70,066 | 47.7 % | 8.4 % | 1.17 |
+| Forecast, linear expected price (a) | $15.76 m | $70,044 | 47.7 % | 9.0 % | 1.16 |
+| **Forecast, learned expected price (c)** | **$15.56 m** | **$69,161** | **47.0 %** | **9.4 %** | **1.14** |
+| Naive time-of-day | $15.21 m | $67,600 | 46.0 % | 17.7 % | 0.96 |
+
+Capture by quarter (net revenue as % of perfect foresight):
+
+| Quarter | Forecast (c) | Forecast (median) | Naive |
+|---|---|---|---|
+| 2024 Q2 | 49.4 | 50.5 | 41.1 |
+| 2024 Q3 | 51.9 | 50.2 | 47.2 |
+| 2024 Q4 | 53.3 | 51.4 | 37.9 |
+| 2025 Q1 | 50.7 | 51.4 | 33.9 |
+| **2025 Q2** | **36.1** | **38.3** | **59.2** |
+| 2025 Q3 | 56.4 | 60.0 | 54.8 |
+| 2025 Q4 | 50.1 | 53.1 | 35.8 |
+| 2026 Q1 | 44.6 | 42.0 | 34.3 |
+| 2026 Q2 | 25.7 | 30.3 | 12.7 |
+
+Checks: physically valid dispatch for all planning prices (energy balance exact, limits respected,
+no simultaneous charge and discharge, every quarter ends at 50 %).
+
+**Findings.**
+- **The forecasts beat naive in 8 of 9 quarters, often by 10–17 percentage points, and halve the
+  loss-making days (9 % against 18 %).** Pooled, the advantage is only about 1 point because one
+  quarter dominates.
+- **Two days decide the pooled result.** In 2025 Q2, 26 June and 12 June (prices up to about
+  $15,000/MWh) account for more than the whole quarter's shortfall against naive: about $2.2 m.
+  On 26 June, prices were already $180–400 at midday and reached $3,900–14,000 from 17:00 to 20:30.
+  Naive charged at midday regardless of price (its fixed routine) and discharged into $4,000–9,500
+  at 17:30–19:30, earning $1.38 m, partly by luck. The forecast battery made small in-and-out trades
+  around $300 and was empty when the spike arrived ($0.19 m).
+- **Root cause: spike magnitude is badly under-forecast, and the information that was available
+  is not used.** At 13:00 the 4-hour-ahead forecast for 17:00 had median $304 and 99th percentile
+  $2,008 (actual $9,656), so the expected price looked like an ordinary dear afternoon. The spike
+  classifier did flag the risk (P(spike) = 0.43), but the planning price does not use the spike
+  probability, and the water-value curve is a fixed average that does not rise on high-risk days.
+- **The planning price that was best on RMSE (c) is not the best for the battery.** The median
+  and the linear method earn slightly more than (c). With differences this small this may be
+  noise, but it illustrates that forecast accuracy and decision value are different criteria
+  (decision-focused evaluation).
+
 ---
 
 ## Planned extensions (after the core pipeline)
