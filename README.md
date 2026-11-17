@@ -81,17 +81,29 @@ Strategies compared:
 
 Outcomes over 821 development days (Apr 2024 – Jun 2026), at $40/MWh wear cost:
 
-| Strategy | Net revenue | Per MW per year | Share of perfect foresight | Loss-making days |
+| Strategy | Net revenue | Per MW per year | Share of perfect foresight (95 % interval) | Loss-making days |
 |---|---|---|---|---|
 | Perfect foresight | $33.1 m | $147,000 | 100 % | < 1 % |
-| **Forecast-driven** | **$15.6 m** | **$69,000** | **47 %** | **9 %** |
-| Naive daily schedule | $15.2 m | $68,000 | 46 % | 18 % |
+| **Forecast-driven** | **$15.6 m** | **$69,000** | **47 % (41–54 %)** | **9 %** |
+| Naive daily schedule | $15.2 m | $68,000 | 46 % (41–51 %) | 18 % |
 
-**Summary.** The forecast-driven battery generally outperformed the naive schedule: it did better
-in 8 of 9 quarters (often by 10–17 percentage points of perfect foresight), on 61 % of individual
-days, and halved the number of loss-making days. But on two extreme days in June 2025, with
-prices up to about $15,000/MWh, it lost about $2.2 m relative to naive. Excluding just those two
-days, it was $2.5 m ahead over the period; including them, only $0.35 m.
+Forecast-driven against naive, same 821 days:
+
+| Measure | Result | 95 % interval | Distinguishable from no difference? |
+|---|---|---|---|
+| Total net revenue ahead | +$0.35 m | −$3.1 m to +$2.8 m | **No** |
+| Share of days ahead | 61 % | 57–65 % | Yes (above 50 %) |
+| Typical (median) day's gap | +$2,200 | +$1,100 to +$2,900 | Yes (above $0) |
+
+(Intervals from a block bootstrap over days; see design notes §9.3.)
+
+**Summary.** On total revenue, the forecast-driven battery cannot be told apart from the naive
+schedule: it finished $0.35 m ahead, but the interval runs from $3.1 m behind to $2.8 m ahead.
+On a typical day it is reliably better: ahead on 61 % of days, by a median of $2,200, in 8 of 9
+quarters (often by 10–17 percentage points of perfect foresight), with half as many loss-making
+days. The two views disagree because revenue is concentrated in a few extreme days. On two days
+in June 2025, with prices up to about $15,000/MWh, it fell $2.2 m behind naive, almost exactly
+offsetting the $2.5 m it gained across the other 819 days.
 
 **Why.** On 26 June 2025, prices were already $180–400 at midday and reached $3,900–14,000 from
 17:00 to 20:30. The forecasts saw an ordinary expensive afternoon: the 4-hour-ahead forecast for
@@ -207,9 +219,9 @@ See `docs/design_notes.md` for design decisions and limitations.
   otherwise these snapshots, for all eight dispatch horizons. Until the six intermediate
   snapshots are committed it therefore needs the two `backtest` commands above; it also always
   needs the AEMO prices (`fetch-prices`), which are not committed.
-- `battery_summary_forecast_deg40.csv` gives each strategy's net revenue minus the naive
-  schedule's with a bootstrap 95 % interval (`net_vs_naive_time_of_day*` columns): for the
-  headline forecast-driven battery, +$0.35 m with an interval of −$3.1 m to +$2.8 m.
+- `battery_summary_forecast_deg40.csv` includes the bootstrap 95 % intervals quoted above:
+  `capture_vs_perfect_ci_*` and the `net_vs_naive_time_of_day*` columns (total, share of days
+  ahead and median daily gap against the naive schedule).
 
 ## Data attribution and licences
 

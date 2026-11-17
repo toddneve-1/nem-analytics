@@ -161,6 +161,33 @@ def daily_results(dispatch: pd.DataFrame, spec: BatterySpec) -> pd.DataFrame:
     return out
 
 
+def _block_resamples(n: int, n_boot: int, block_days: int, seed: int) -> np.ndarray:
+    """Day indices for a circular block bootstrap: ``n_boot`` rows, each a resampled period of
+    ``n`` days built from blocks of ``block_days`` consecutive days drawn with replacement."""
+    if not 1 <= block_days <= n:
+        raise ValueError("block_days must be between 1 and the number of days")
+    rng = np.random.default_rng(seed)
+    starts = rng.integers(0, n, size=(n_boot, -(-n // block_days)))
+    idx = (starts[:, :, None] + np.arange(block_days)[None, None, :]) % n
+    return idx.reshape(n_boot, -1)[:, :n]
+
+
+def _interval(values: np.ndarray) -> tuple[float, float]:
+    low, high = np.percentile(values, [2.5, 97.5])
+    return float(low), float(high)
+
+
+def _daily_net(daily: pd.DataFrame, strategies: list[str]) -> pd.DataFrame:
+    wide = daily.pivot(index="nem_day", columns="strategy", values="net_revenue").sort_index()
+    missing = set(strategies) - set(wide.columns)
+    if missing:
+        raise ValueError(f"no daily results for {sorted(missing)}")
+    wide = wide[strategies]
+    if wide.isna().any().any():
+        raise ValueError("strategies must be evaluated on exactly the same days")
+    return wide
+
+
 def paired_bootstrap(
     daily: pd.DataFrame,
     strategy: str,
@@ -169,7 +196,7 @@ def paired_bootstrap(
     block_days: int = 7,
     seed: int = 0,
 ) -> dict[str, float]:
-    """Uncertainty of ``strategy``'s total net revenue minus ``baseline``'s, over the same days.
+    """How far ``strategy`` is ahead of ``baseline`` over the same days, with uncertainty.
 
     Battery revenue is concentrated in a handful of days, so a difference in totals can rest on
     one or two of them. This resamples the *paired* daily differences (same day, both strategies)
@@ -178,32 +205,51 @@ def paired_bootstrap(
     that carries charge overnight moves revenue between neighbouring days and price regimes
     persist for days.
 
-    Returns the observed difference, a 95 % percentile interval and the share of resamples in
-    which the difference is zero or negative. This describes sampling uncertainty over days like
-    those observed; it cannot account for kinds of day that never occurred in the period.
+    Three views of the same differences, each with a 95 % percentile interval:
+
+    * ``difference``: total net revenue ahead ($). Sensitive to the few extreme days.
+    * ``share_days_ahead``: share of days with higher net revenue. Ignores the size of the gap.
+    * ``median_daily``: the typical day's gap ($). Robust to extreme days.
+
+    ``share_not_positive`` is the share of resamples in which the total is zero or negative.
+    The intervals describe sampling uncertainty over days like those observed; they cannot
+    account for kinds of day that never occurred in the period.
     """
-    wide = daily.pivot(index="nem_day", columns="strategy", values="net_revenue").sort_index()
-    missing = {strategy, baseline} - set(wide.columns)
-    if missing:
-        raise ValueError(f"no daily results for {sorted(missing)}")
+    wide = _daily_net(daily, [strategy, baseline])
     diff = (wide[strategy] - wide[baseline]).to_numpy()
-    if np.isnan(diff).any():
-        raise ValueError("strategies must be evaluated on exactly the same days")
-    n = len(diff)
-    if not 1 <= block_days <= n:
-        raise ValueError("block_days must be between 1 and the number of days")
-    rng = np.random.default_rng(seed)
-    n_blocks = -(-n // block_days)
-    starts = rng.integers(0, n, size=(n_boot, n_blocks))
-    idx = (starts[:, :, None] + np.arange(block_days)[None, None, :]) % n
-    totals = diff[idx.reshape(n_boot, -1)[:, :n]].sum(axis=1)
-    low, high = np.percentile(totals, [2.5, 97.5])
-    return {
-        "difference": float(diff.sum()),
-        "ci_low": float(low),
-        "ci_high": float(high),
-        "share_not_positive": float(np.mean(totals <= 0)),
-    }
+    resampled = diff[_block_resamples(len(diff), n_boot, block_days, seed)]
+    totals = resampled.sum(axis=1)
+    out = {"difference": float(diff.sum()), "share_not_positive": float(np.mean(totals <= 0))}
+    out["ci_low"], out["ci_high"] = _interval(totals)
+    out["share_days_ahead"] = float(np.mean(diff > 0))
+    out["share_days_ahead_ci_low"], out["share_days_ahead_ci_high"] = _interval(
+        (resampled > 0).mean(axis=1)
+    )
+    out["median_daily"] = float(np.median(diff))
+    out["median_daily_ci_low"], out["median_daily_ci_high"] = _interval(
+        np.median(resampled, axis=1)
+    )
+    return out
+
+
+def capture_bootstrap(
+    daily: pd.DataFrame,
+    strategy: str,
+    reference: str = "perfect_foresight",
+    n_boot: int = 10_000,
+    block_days: int = 7,
+    seed: int = 0,
+) -> tuple[float, float]:
+    """95 % interval for ``strategy``'s total net revenue as a share of ``reference``'s.
+
+    The same resampled days are used for numerator and denominator, so the interval reflects how
+    much the share depends on which days happened to fall in the period.
+    """
+    wide = _daily_net(daily, [strategy, reference])
+    idx = _block_resamples(len(wide), n_boot, block_days, seed)
+    num = wide[strategy].to_numpy()[idx].sum(axis=1)
+    den = wide[reference].to_numpy()[idx].sum(axis=1)
+    return _interval(num / den)
 
 
 def summarise_strategies(
@@ -216,11 +262,15 @@ def summarise_strategies(
 ) -> pd.DataFrame:
     """Totals per strategy; capture is net revenue relative to perfect foresight, same days.
 
-    With ``baseline`` (a strategy name), each other row also gets ``net_vs_<baseline>``: its net
-    revenue minus the baseline's, with a bootstrap 95 % interval (``_ci_low``, ``_ci_high``) and
-    the share of resamples where it is not ahead (``_share_not_positive``); see
-    :func:`paired_bootstrap`. A headline difference is then never reported without its
-    uncertainty.
+    With ``baseline`` (a strategy name), bootstrap 95 % intervals are added, so a headline is
+    never reported without its uncertainty:
+
+    * ``capture_vs_perfect_ci_low`` / ``_ci_high`` (:func:`capture_bootstrap`);
+    * ``net_vs_<baseline>``: net revenue minus the baseline's, with ``_ci_low``, ``_ci_high``
+      and the share of resamples where it is not ahead (``_share_not_positive``);
+    * ``net_vs_<baseline>_share_days_ahead`` and ``net_vs_<baseline>_median_daily``, each with
+      an interval: views of the same comparison that do not hinge on a few extreme days
+      (:func:`paired_bootstrap`).
     """
     usable = spec.soc_max_mwh - spec.soc_min_mwh
     g = daily.groupby("strategy")
@@ -238,6 +288,14 @@ def summarise_strategies(
     out["net_per_mw_year"] = out["net_per_day"] * 365 / spec.power_mw
     if "perfect_foresight" in out.index:
         out["capture_vs_perfect"] = out["net_revenue"] / out.loc["perfect_foresight", "net_revenue"]
+    if baseline is not None and "perfect_foresight" in out.index:
+        others = [name for name in out.index if name != "perfect_foresight"]
+        for name in others:
+            low, high = capture_bootstrap(
+                daily, name, n_boot=n_boot, block_days=block_days, seed=seed
+            )
+            out.loc[name, "capture_vs_perfect_ci_low"] = low
+            out.loc[name, "capture_vs_perfect_ci_high"] = high
     if baseline is not None:
         rows = {
             name: paired_bootstrap(daily, name, baseline, n_boot, block_days, seed)

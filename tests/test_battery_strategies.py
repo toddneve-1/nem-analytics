@@ -7,6 +7,7 @@ import pytest
 from nemspike.battery.lp import BatterySpec
 from nemspike.battery.strategies import (
     add_nem_day,
+    capture_bootstrap,
     daily_results,
     naive_time_of_day,
     paired_bootstrap,
@@ -140,6 +141,20 @@ def test_bootstrap_interval_spans_zero_when_one_day_decides_the_total() -> None:
     assert out["difference"] == pytest.approx(199 * 100 - 14_900)
     assert out["ci_low"] < 0 < out["ci_high"]
     assert 0.05 < out["share_not_positive"] < 0.95
+    # The robust views are not fooled by the one day: ahead on nearly every day, by $100.
+    assert out["share_days_ahead"] == pytest.approx(199 / 200)
+    assert out["share_days_ahead_ci_low"] > 0.95
+    assert out["median_daily"] == out["median_daily_ci_low"] == out["median_daily_ci_high"] == 100.0
+
+
+def test_capture_interval_brackets_the_observed_share() -> None:
+    rng = np.random.default_rng(2)
+    reference = rng.lognormal(10, 1.5, 300)  # heavy-tailed, like perfect-foresight revenue
+    daily = _daily(reference * rng.uniform(0.2, 0.8, 300), reference)
+    low, high = capture_bootstrap(daily, "a", reference="b", n_boot=2000)
+    observed = daily[daily.strategy == "a"].net_revenue.sum() / reference.sum()
+    assert 0.2 < low < observed < high < 0.8
+    assert capture_bootstrap(daily, "b", reference="b", n_boot=50) == (1.0, 1.0)
 
 
 def test_bootstrap_is_reproducible_and_paired() -> None:
@@ -172,3 +187,6 @@ def test_summary_reports_difference_from_baseline_with_interval(prices: pd.DataF
     assert pf["net_vs_naive_time_of_day"] == pytest.approx(pf["net_revenue"] - naive["net_revenue"])
     assert pf["net_vs_naive_time_of_day_ci_low"] <= pf["net_vs_naive_time_of_day_ci_high"]
     assert np.isnan(naive["net_vs_naive_time_of_day"])  # the baseline has no difference to itself
+    assert naive["capture_vs_perfect_ci_low"] <= naive["capture_vs_perfect"]
+    assert naive["capture_vs_perfect"] <= naive["capture_vs_perfect_ci_high"]
+    assert pf["net_vs_naive_time_of_day_share_days_ahead"] == 1.0

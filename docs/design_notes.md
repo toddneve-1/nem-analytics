@@ -790,30 +790,42 @@ Capture by quarter (net revenue as % of perfect foresight):
 Checks: physically valid dispatch for all planning prices (energy balance exact, limits respected,
 no simultaneous charge and discharge, every quarter ends at 50 %).
 
-**How certain is the difference from naive?** Revenue is concentrated in a few days, so the
-difference in totals is reported with a paired block bootstrap
-(`nemspike.battery.strategies.paired_bootstrap`): daily differences from naive on the same days,
-resampled in blocks of 7 consecutive days (10,000 resamples, seed 42; blocks because the battery
-carries charge overnight and price regimes last for days). Saved in
+**How certain are these results?** Revenue is concentrated in a few days, so every headline is
+reported with a 95 % interval from a paired block bootstrap
+(`nemspike.battery.strategies.paired_bootstrap` and `capture_bootstrap`): the same days for all
+strategies, resampled in blocks of 7 consecutive days (10,000 resamples, seed 42; blocks because
+the battery carries charge overnight and price regimes last for days). Saved in
 `battery_summary_forecast_deg40.csv`.
 
-| Strategy | Net revenue minus naive | 95 % interval | Resamples not ahead of naive |
-|---|---|---|---|
-| Forecast, median price | +$0.55 m | −$2.9 m to +$2.8 m | 32 % |
-| Forecast, linear expected price (a) | +$0.55 m | −$3.0 m to +$3.0 m | 33 % |
-| Forecast, learned expected price (c) | +$0.35 m | −$3.1 m to +$2.8 m | 37 % |
+| Strategy | Capture vs perfect | Net revenue minus naive | Resamples not ahead | Days ahead of naive | Median daily gap to naive |
+|---|---|---|---|---|---|
+| Forecast, median price | 47.7 % (40.7–53.9) | +$0.55 m (−$2.9 m to +$2.8 m) | 32 % | 64.8 % (60.8–68.8) | +$2,134 ($1,630–2,897) |
+| Forecast, linear expected price (a) | 47.7 % (41.6–54.8) | +$0.55 m (−$3.0 m to +$3.0 m) | 33 % | 63.0 % (58.7–67.1) | +$2,045 ($1,328–2,909) |
+| Forecast, learned expected price (c) | 47.0 % (41.1–54.0) | +$0.35 m (−$3.1 m to +$2.8 m) | 37 % | 61.1 % (56.8–65.4) | +$2,198 ($1,125–2,926) |
+| Naive time-of-day | 46.0 % (40.5–51.1) | – | – | – | – |
 
-Every interval spans zero by a wide margin: **on total revenue, 821 days do not show that the
-forecast-driven battery beats the naive schedule.** Block lengths of 1 and 14 days give almost the
-same intervals. The interval only reflects days like those observed; it says nothing about kinds
-of day that did not occur.
+Reading the three comparisons with naive:
+- **Total revenue: not distinguishable.** Every interval spans zero by a wide margin, and about a
+  third of resampled periods have the forecast battery behind. 821 days do not show that it
+  earns more than the naive schedule.
+- **Typical day: distinguishable.** The share of days ahead is above 50 % and the median daily
+  gap is above $0 for all three planning prices; neither interval comes near "no difference".
+- The two disagree because the total is decided by a handful of extreme days while the other two
+  measures are not. Both are true; which matters depends on whether the question is "is the
+  typical day better" or "does it earn more". For a battery it is the second.
+
+Block lengths of 1 and 14 days give almost the same intervals. The intervals only reflect days
+like those observed; they say nothing about kinds of day that did not occur. The three planning
+prices cannot be ranked against each other on this evidence.
 
 **Findings.**
 - **The forecasts beat naive in 8 of 9 quarters, often by 10–17 percentage points, and halve the
   loss-making days (9 % against 18 %).** Pooled, the advantage is only about 1 point because one
   quarter dominates.
-- **Two days decide the pooled result.** In 2025 Q2, 26 June and 12 June (prices up to about
-  $15,000/MWh) account for more than the whole quarter's shortfall against naive: about $2.2 m.
+- **Two days offset the rest of the period.** In 2025 Q2, 26 June and 12 June (prices up to about
+  $15,000/MWh) account for more than the whole quarter's shortfall against naive: about $2.2 m,
+  against $2.5 m gained over the other 819 days. This is a description of where the total comes
+  from, not a case for setting those days aside: they are exactly the days a battery exists for.
   On 26 June, prices were already $180–400 at midday and reached $3,900–14,000 from 17:00 to 20:30.
   Naive charged at midday regardless of price (its fixed routine) and discharged into $4,000–9,500
   at 17:30–19:30, earning $1.38 m, partly by luck. The forecast battery made small in-and-out trades
