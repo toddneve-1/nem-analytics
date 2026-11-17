@@ -135,6 +135,9 @@ class BatteryConfig(BaseModel):
     lookahead_hours: float = Field(gt=0)
     # Wear cost in $ per MWh discharged; the optimiser only trades if the spread covers it.
     degradation_cost_per_mwh: float = Field(default=0.0, ge=0)
+    # "continuous": state of charge carried across midnights (50 % only at the start and end of
+    # each evaluation period). "daily": every day starts and ends at the initial level.
+    mode: Literal["continuous", "daily"] = "continuous"
 
     @model_validator(mode="after")
     def _check_soc(self) -> BatteryConfig:

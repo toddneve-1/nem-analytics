@@ -196,6 +196,7 @@ def battery(
     degradation_costs: str = typer.Option(
         "", help="Comma-separated $/MWh wear costs for a sensitivity run (default: config value)"
     ),
+    mode: str = typer.Option("", help="'continuous' or 'daily' (default: config value)"),
     track: bool = typer.Option(True, help="Log each wear-cost run to MLflow"),
 ) -> None:
     """Battery revenue for perfect foresight and the naive time-of-day strategy."""
@@ -219,6 +220,9 @@ def battery(
     cfg = load_config(config)
     d = cfg.data
     base_spec = BatterySpec.from_config(cfg.battery)
+    mode = mode or cfg.battery.mode
+    if mode not in ("continuous", "daily"):
+        raise typer.BadParameter("mode must be 'continuous' or 'daily'")
     costs = (
         [float(c) for c in degradation_costs.split(",")]
         if degradation_costs
@@ -240,26 +244,28 @@ def battery(
             # Intervals whose start lies in the fold's test period.
             test = prices[(ends > fold.test_start) & (ends <= fold.test_end)]
             train = prices[ends <= fold.test_start]
-            frames.append(perfect_foresight(test, spec).assign(fold_label=fold.label))
+            frames.append(perfect_foresight(test, spec, mode).assign(fold_label=fold.label))
             frames.append(naive_time_of_day(train, test, spec).assign(fold_label=fold.label))
         dispatch = pd.concat(frames, ignore_index=True)
-        tag = f"deg{cost:g}"
+        tag = f"{mode}_deg{cost:g}"
         dispatch.to_parquet(out_dir / f"dispatch_{tag}.parquet", index=False)
         daily = daily_results(dispatch, spec)
         daily_csv = metric_dir / f"battery_daily_{tag}.csv"
         daily.to_csv(daily_csv, index=False)
         one = summarise_strategies(daily, spec)
         summaries.append(one.assign(degradation_cost_per_mwh=cost))
-        typer.echo(f"degradation cost ${cost:g}/MWh: done ({daily['nem_day'].nunique()} days)")
+        typer.echo(
+            f"[{mode}] degradation cost ${cost:g}/MWh: done ({daily['nem_day'].nunique()} days)"
+        )
         if track:
             from nemspike.tracking.mlflow_utils import log_battery
 
-            run_id = log_battery(cfg, config, stage, cost, one, daily_csv)
+            run_id = log_battery(cfg, config, stage, cost, one, daily_csv, mode)
             typer.echo(f"  logged to MLflow run {run_id}")
 
     summary = pd.concat(summaries).set_index("degradation_cost_per_mwh", append=True)
     summary = summary.reorder_levels(["degradation_cost_per_mwh", "strategy"]).sort_index()
-    summary.to_csv(metric_dir / "battery_summary.csv")
+    summary.to_csv(metric_dir / f"battery_summary_{mode}.csv")
     with pd.option_context("display.width", 250, "display.precision", 3):
         typer.echo(summary.to_string())
 

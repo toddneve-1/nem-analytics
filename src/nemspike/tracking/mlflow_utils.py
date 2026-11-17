@@ -116,6 +116,7 @@ def log_battery(
     degradation_cost: float,
     summary: pd.DataFrame,
     daily_csv: Path,
+    mode: str = "continuous",
 ) -> str:
     """Record one battery-strategy evaluation (one wear cost). Returns the MLflow run id.
 
@@ -123,9 +124,14 @@ def log_battery(
     """
     mlflow = _mlflow()
     setup(cfg)
-    with mlflow.start_run(run_name=f"{stage}-battery-deg{degradation_cost:g}") as run:
+    with mlflow.start_run(run_name=f"{stage}-battery-{mode}-deg{degradation_cost:g}") as run:
         mlflow.set_tags(
-            {"stage": stage, "kind": "battery", "degradation_cost_per_mwh": f"{degradation_cost:g}"}
+            {
+                "stage": stage,
+                "kind": "battery",
+                "battery_mode": mode,
+                "degradation_cost_per_mwh": f"{degradation_cost:g}",
+            }
             | git_state()
         )
         mlflow.log_params(flatten(cfg.model_dump(mode="json")))

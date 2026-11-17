@@ -41,8 +41,8 @@ def test_perfect_foresight_beats_naive_on_every_day(prices: pd.DataFrame) -> Non
     assert (wide["perfect_foresight"] >= wide["naive_time_of_day"] - 1e-6).all()
 
 
-def test_each_day_returns_to_initial_state_of_charge(prices: pd.DataFrame) -> None:
-    pf = perfect_foresight(prices, SPEC)
+def test_daily_mode_returns_to_initial_state_of_charge_every_day(prices: pd.DataFrame) -> None:
+    pf = perfect_foresight(prices, SPEC, "daily")
     end_soc = pf.groupby("nem_day")["soc_mwh"].last()
     np.testing.assert_allclose(end_soc, SPEC.soc_initial_mwh, atol=1e-6)
 
@@ -73,3 +73,27 @@ def test_summary_capture_is_relative_to_perfect_foresight(prices: pd.DataFrame) 
     # The naive schedule can lose money (it can chase spikes that do not recur), so only the
     # upper bound is guaranteed.
     assert s.loc["naive_time_of_day", "capture_vs_perfect"] <= 1.0
+
+
+# --- continuous vs daily ---------------------------------------------------------------------
+
+
+def test_continuous_is_at_least_as_good_as_daily(prices: pd.DataFrame) -> None:
+    """Carrying energy across midnight can only add options, never remove them."""
+    cont = daily_results(perfect_foresight(prices, SPEC, "continuous"), SPEC)
+    daily = daily_results(perfect_foresight(prices, SPEC, "daily"), SPEC)
+    assert cont["net_revenue"].sum() >= daily["net_revenue"].sum() - 1e-6
+
+
+def test_continuous_only_fixes_state_of_charge_at_period_ends(prices: pd.DataFrame) -> None:
+    d = perfect_foresight(prices, SPEC, "continuous")
+    assert d["soc_mwh"].iloc[-1] == pytest.approx(SPEC.soc_initial_mwh)
+    midnight_soc = d.groupby("nem_day")["soc_mwh"].last().iloc[:-1]
+    # Not forced back to the initial level every night (it is free to carry energy over).
+    assert (np.abs(midnight_soc - SPEC.soc_initial_mwh) > 1e-3).any()
+
+
+def test_continuous_rejects_a_gap_in_prices(prices: pd.DataFrame) -> None:
+    gappy = prices.drop(index=prices.index[3 * 288 : 4 * 288])  # remove a whole day
+    with pytest.raises(ValueError, match="unbroken"):
+        perfect_foresight(gappy, SPEC, "continuous")

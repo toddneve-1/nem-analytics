@@ -1,20 +1,29 @@
-"""Battery dispatch strategies, evaluated day by day at actual prices.
+"""Battery dispatch strategies, evaluated at actual prices.
 
-Each NEM day (288 intervals, 00:00-24:00 AEST) starts and ends at the initial state of charge, so
-days are independent and strategies are comparable. This rules out carrying energy overnight
-between days, a small restriction that applies equally to every strategy.
+Two rule sets, applied identically to every strategy so that they differ only in information:
 
-* **Perfect foresight**: optimise each day on its actual prices. An upper bound no real strategy
-  can reach.
+* **continuous** (default): the state of charge is carried across midnights; the battery starts
+  and ends each evaluation period (a test quarter) at the initial level. This is how a real
+  operator runs a battery and gives the true perfect-foresight ceiling.
+* **daily**: every NEM day (288 intervals, 00:00-24:00 AEST) starts and ends at the initial level,
+  so days are independent. Kept as a comparison.
+
+Strategies:
+
+* **Perfect foresight**: optimise on actual prices (the whole period, or each day). An upper bound
+  no real strategy can reach.
 * **Naive time-of-day**: optimise once on the *average* price profile by time of day from the
   training period (data before the test fold), then repeat that fixed schedule every day. Uses no
-  forecasts and no information from the test period.
+  forecasts and no information from the test period. Its schedule returns to the initial level
+  every night, so it is valid under both rule sets.
 * Forecast-driven rolling-horizon dispatch is added in Step 9.
 
 Revenue is always settled at the actual RRP: ``sum(price * (discharge - charge) * 5/60)``.
 """
 
 from __future__ import annotations
+
+from typing import Literal
 
 import numpy as np
 import pandas as pd
@@ -23,6 +32,8 @@ from nemspike.battery.lp import BatterySpec, Dispatch, optimise
 from nemspike.timeutils import INTERVAL, to_nem_time
 
 INTERVALS_PER_DAY = 288
+
+Mode = Literal["continuous", "daily"]
 
 
 def add_nem_day(prices: pd.DataFrame) -> pd.DataFrame:
@@ -56,9 +67,26 @@ def _record(day_rows: pd.DataFrame, d: Dispatch, strategy: str) -> pd.DataFrame:
     )
 
 
-def perfect_foresight(prices: pd.DataFrame, spec: BatterySpec) -> pd.DataFrame:
-    """Per-interval dispatch, optimising each full NEM day on its actual prices."""
+def perfect_foresight(
+    prices: pd.DataFrame, spec: BatterySpec, mode: Mode = "continuous"
+) -> pd.DataFrame:
+    """Per-interval dispatch with full knowledge of actual prices.
+
+    ``mode="continuous"``: one optimisation over the whole period, with the state of charge carried
+    across midnights and fixed at the initial level only at the start and end of the period.
+    ``mode="daily"``: each NEM day optimised separately, starting and ending at the initial level.
+    """
     p = _full_days(add_nem_day(prices))
+    if mode == "continuous":
+        steps = p["interval_end"].diff().dropna()
+        if not (steps == INTERVAL).all():
+            raise ValueError("continuous optimisation needs an unbroken 5-minute price series")
+        d = optimise(
+            p["rrp"].to_numpy(), spec, soc_start=spec.soc_initial_mwh, soc_end=spec.soc_initial_mwh
+        )
+        return _record(p, d, "perfect_foresight")
+    if mode != "daily":
+        raise ValueError(f"unknown mode {mode!r}")
     out = []
     for _, day in p.groupby("nem_day", sort=True):
         d = optimise(
