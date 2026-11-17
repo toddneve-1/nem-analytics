@@ -86,6 +86,19 @@ def test_pipeline_runs_end_to_end(project: Path, monkeypatch: pytest.MonkeyPatch
     # One storage-value cache, named by a fingerprint rather than the wear cost alone.
     assert len(list((project / "artefacts/battery").glob("storage_values_*.parquet"))) == 1
 
+    # The ladder run: threshold execution, recalibrated price and the threshold-only benchmark.
+    _run(project, monkeypatch, "battery-forecast", "--price-methods", "learned,recalibrated",
+         "--execution", "plan,threshold", "--threshold-only", "--tag", "ladder",
+         "--no-track")  # fmt: skip
+    ladder = pd.read_csv(metrics / "battery_summary_ladder_deg40.csv", index_col=0)
+    assert set(ladder.index) == {
+        "forecast_learned", "forecast_recalibrated", "threshold_learned",
+        "threshold_recalibrated", "threshold_only", "naive_time_of_day", "perfect_foresight",
+    }  # fmt: skip
+    assert (ladder["days"] == 31).all()
+    assert (ladder["net_revenue"] <= ladder.loc["perfect_foresight", "net_revenue"] + 1e-6).all()
+    assert ladder["capture_best10"].notna().all()
+
 
 def test_battery_forecast_falls_back_to_committed_snapshots(
     project: Path, monkeypatch: pytest.MonkeyPatch

@@ -158,9 +158,10 @@ def threshold_dispatch(
     is needed. Simplification: the whole interval runs at full power, using the marginal value at
     the current state of charge (a real offer stack would use several bands).
 
-    Once the period's end is within ``lookahead`` intervals, the strategy follows a plan that
-    must end at the initial state of charge (planning prices: the forecasts, or ``climatology``
-    for the threshold-only benchmark), the same end rule as every other strategy.
+    When the period's end first comes within ``lookahead`` intervals, the strategy makes one plan
+    to the end that must finish at the initial state of charge (planning prices: the forecasts, or
+    ``climatology`` for the threshold-only benchmark) and follows it: the same end rule as every
+    other strategy, using only forecasts available at that moment.
     """
     from nemspike.battery.water_value import storage_values
 
@@ -178,27 +179,33 @@ def threshold_dispatch(
     charge, discharge, soc_path = np.zeros(n), np.zeros(n), np.zeros(n)
     soc = spec.soc_initial_mwh
 
-    for i in range(n):
-        window = min(lookahead, n - i)
+    final_start = max(n - lookahead, 0)
+    for i in range(final_start):
+        window = lookahead
         if plan_prices is not None:
             origin = ends.iloc[i] - INTERVAL
             if origin not in plan_prices.index:
                 raise KeyError(f"no forecasts for origin {origin}")
             path = plan_price_path(plan_prices.loc[origin], window, horizons)
+            terminal = float(lookup_value(curve, ends.iloc[[i + window - 1]])[0])
+            value = float(storage_values(path, spec, soc_start=soc, terminal_value=terminal)[0])
         else:
-            path = climatology.reindex(slots[i : i + window]).to_numpy(dtype=float)
-
-        if i + window == n:  # the period's end is in view: follow a plan that ends at the start
-            plan = optimise(path, spec, soc_start=soc, soc_end=spec.soc_initial_mwh)
-            charge[i], discharge[i], soc = plan.charge_mw[0], plan.discharge_mw[0], plan.soc_mwh[0]
-        else:
-            if plan_prices is not None:
-                terminal = float(lookup_value(curve, ends.iloc[[i + window - 1]])[0])
-                value = float(storage_values(path, spec, soc_start=soc, terminal_value=terminal)[0])
-            else:
-                value = float(curve_now[i])
-            below, above = execution_thresholds(value, spec)
-            charge[i], discharge[i], soc = _execute(actual[i], soc, below, above, spec)
+            value = float(curve_now[i])
+        below, above = execution_thresholds(value, spec)
+        charge[i], discharge[i], soc = _execute(actual[i], soc, below, above, spec)
         soc_path[i] = soc
+
+    # The period's end is in view: one plan to the end, finishing at the initial state of charge,
+    # followed without re-planning (it needs only forecasts available at that moment).
+    i, window = final_start, n - final_start
+    if plan_prices is not None:
+        origin = ends.iloc[i] - INTERVAL
+        if origin not in plan_prices.index:
+            raise KeyError(f"no forecasts for origin {origin}")
+        path = plan_price_path(plan_prices.loc[origin], window, horizons)
+    else:
+        path = climatology.reindex(slots[i:]).to_numpy(dtype=float)
+    plan = optimise(path, spec, soc_start=soc, soc_end=spec.soc_initial_mwh)
+    charge[i:], discharge[i:], soc_path[i:] = plan.charge_mw, plan.discharge_mw, plan.soc_mwh
 
     return _record(p, Dispatch(charge, discharge, soc_path), strategy)

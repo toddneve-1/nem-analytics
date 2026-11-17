@@ -305,8 +305,16 @@ def battery(
 def battery_forecast(
     config: Path = ConfigOpt,
     price_methods: str = typer.Option(
-        "learned,median,linear", help="Planning prices: learned (method c), median, linear"
+        "learned,median,linear",
+        help="Planning prices: learned (method c), recalibrated, median, linear",
     ),
+    execution: str = typer.Option(
+        "plan", help="plan (follow each 30-minute plan) and/or threshold (5-minute re-plan)"
+    ),
+    threshold_only: bool = typer.Option(
+        False, help="Also run the no-forecast threshold benchmark (historical water value)"
+    ),
+    tag: str = typer.Option("forecast", help="Name for the output files and MLflow run"),
     model: str = typer.Option(
         "", help="Forecast model whose saved predictions to use (default: config's model)"
     ),
@@ -326,10 +334,16 @@ def battery_forecast(
 
     import pandas as pd
 
-    from nemspike.battery.expected_price import QUANTILE_COLUMNS, LearnedBands, expected_price
+    from nemspike.battery.expected_price import (
+        QUANTILE_COLUMNS,
+        LearnedBands,
+        SpikeRecalibration,
+        expected_price,
+    )
     from nemspike.battery.lp import BatterySpec
-    from nemspike.battery.rolling import rolling_dispatch
+    from nemspike.battery.rolling import rolling_dispatch, threshold_dispatch
     from nemspike.battery.strategies import (
+        add_nem_day,
         daily_results,
         naive_time_of_day,
         perfect_foresight,
@@ -352,6 +366,9 @@ def battery_forecast(
     horizons = tuple(cfg.forecast.dispatch_horizons_minutes)
     resolve, lookahead = cfg.battery.resolve_intervals, cfg.battery.lookahead_intervals
     methods = [m.strip() for m in price_methods.split(",") if m.strip()]
+    executions = [e.strip() for e in execution.split(",") if e.strip()]
+    if not set(executions) <= {"plan", "threshold"}:
+        raise typer.BadParameter("execution must be plan and/or threshold")
     prices = load_price_demand(d.start, d.end, d.region, d.raw_dir)
     ends = prices["interval_end"]
     folds = walk_forward_folds(ends.min(), ends.max(), cfg.validation, "dev")  # type: ignore[arg-type]
@@ -384,30 +401,57 @@ def battery_forecast(
         frames.append(
             naive_time_of_day(train, test, spec, "continuous").assign(fold_label=fold.label)
         )
+        if threshold_only:
+            clim = add_nem_day(train).groupby("slot")["rrp"].mean()
+            frames.append(
+                threshold_dispatch(
+                    test, None, curve, spec, "threshold_only", lookahead, horizons, clim
+                ).assign(fold_label=fold.label)
+            )
         for method in methods:
             cols = {}
             for h, pr in preds.items():
                 cur = pr[pr["fold"] == fold.number].set_index("origin")
-                bands = None
-                if method == "learned":
+                bands, recal = None, None
+                if method in ("learned", "recalibrated"):
                     hist = pr[pr["fold"] < fold.number]
                     bands = LearnedBands.fit(
                         hist[QUANTILE_COLUMNS].to_numpy(), hist["y"].to_numpy()
                     )
-                cols[h] = pd.Series(expected_price(cur, method, bands), index=cur.index)  # type: ignore[arg-type]
+                    if method == "recalibrated":
+                        recal = SpikeRecalibration().fit(
+                            bands.expected(hist[QUANTILE_COLUMNS].to_numpy()),
+                            hist["spike_prob"].to_numpy(),
+                            hist["y"].to_numpy(),
+                        )
+                price = expected_price(
+                    cur,
+                    method,
+                    bands,
+                    recal,
+                    cur["spike_prob"].to_numpy(),  # type: ignore[arg-type]
+                )
+                cols[h] = pd.Series(price, index=cur.index)
             plan = pd.DataFrame(cols)
-            frames.append(
-                rolling_dispatch(
-                    test, plan, curve, spec, f"forecast_{method}", resolve, lookahead, horizons
-                ).assign(fold_label=fold.label)
-            )
+            if "plan" in executions:
+                frames.append(
+                    rolling_dispatch(
+                        test, plan, curve, spec, f"forecast_{method}", resolve, lookahead, horizons
+                    ).assign(fold_label=fold.label)
+                )
+            if "threshold" in executions:
+                frames.append(
+                    threshold_dispatch(
+                        test, plan, curve, spec, f"threshold_{method}", lookahead, horizons
+                    ).assign(fold_label=fold.label)
+                )
         typer.echo(f"{fold.label}: done in {time.time() - t0:.0f}s")
 
     dispatch = pd.concat(frames, ignore_index=True)
     out_dir = ARTEFACT_DIR / "battery" / "dev"
     metric_dir = REPORT_DIR / "metrics" / "dev"
     out_dir.mkdir(parents=True, exist_ok=True)
-    tag = f"forecast_deg{spec.degradation_cost_per_mwh:g}"
+    tag = f"{tag}_deg{spec.degradation_cost_per_mwh:g}"
     dispatch.to_parquet(out_dir / f"dispatch_{tag}.parquet", index=False)
     daily = daily_results(dispatch, spec)
     daily_csv = metric_dir / f"battery_daily_{tag}.csv"
@@ -426,7 +470,7 @@ def battery_forecast(
         from nemspike.tracking.mlflow_utils import log_battery
 
         run_id = log_battery(
-            cfg, config, "dev", spec.degradation_cost_per_mwh, summary, daily_csv, "forecast"
+            cfg, config, "dev", spec.degradation_cost_per_mwh, summary, daily_csv, tag
         )
         typer.echo(f"logged to MLflow run {run_id}")
 
