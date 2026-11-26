@@ -13,6 +13,8 @@ sampling noise.
 from __future__ import annotations
 
 import json
+import logging
+import multiprocessing as mp
 from concurrent.futures import ProcessPoolExecutor
 from dataclasses import dataclass
 from pathlib import Path
@@ -114,6 +116,7 @@ def run_one(
 
 
 def _task(args: tuple) -> dict:
+    logging.disable(logging.WARNING)
     data, cfg, case, poe, sample, cap = args
     return run_one(data, cfg, case, poe, sample, cap)
 
@@ -172,8 +175,12 @@ def run_study(
         for poe in cfg["reliability"]["poe_weights"]
         for s in range(samples)
     ]
-    with ProcessPoolExecutor(max_workers=workers) as ex:
-        results = list(ex.map(_task, tasks))
+    # "spawn", not fork: the parent has already run HiGHS, and forked children can deadlock.
+    with ProcessPoolExecutor(max_workers=workers, mp_context=mp.get_context("spawn")) as ex:
+        results = []
+        for i, r in enumerate(ex.map(_task, tasks), 1):
+            results.append(r)
+            print(f"[{i}/{len(tasks)}] {r['case']} {r['poe']} sample {r['sample']}", flush=True)
     runs = pd.DataFrame(results)
     runs.drop(columns="mean_price").to_csv(out_dir / "runs.csv", index=False)
     eue = eue_table(runs, data, cfg)
