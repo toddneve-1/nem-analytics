@@ -1,9 +1,15 @@
-name: CI
+name: price-spike-forecast
 
 on:
   push:
     branches: [main]
+    paths: ["projects/price-spike-forecast/**", "pyproject.toml", "uv.lock", ".github/workflows/price-spike-forecast.yml"]
   pull_request:
+    paths: ["projects/price-spike-forecast/**", "pyproject.toml", "uv.lock", ".github/workflows/price-spike-forecast.yml"]
+
+defaults:
+  run:
+    working-directory: projects/price-spike-forecast
 
 jobs:
   test:
@@ -17,7 +23,7 @@ jobs:
       - name: Set up Python
         run: uv python install ${{ matrix.python-version }}
       - name: Install
-        run: uv sync --extra dev --python ${{ matrix.python-version }}
+        run: uv sync --package nemspike --extra dev --python ${{ matrix.python-version }}
       - name: Lint
         run: |
           uv run ruff check .

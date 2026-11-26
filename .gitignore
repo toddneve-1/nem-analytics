@@ -8,9 +8,10 @@ __pycache__/
 dist/
 build/
 
-# Data and run outputs are reproducible from code; never committed.
-/data/
-/mlruns/
-/mlartifacts/
-/mlflow.db
-/artefacts/
+# Data and run outputs are reproducible from code; never committed. (Anchored per project so
+# that code packages named "data" are not ignored.)
+projects/*/data/
+projects/*/mlruns/
+projects/*/mlartifacts/
+projects/*/mlflow.db
+projects/*/artefacts/
