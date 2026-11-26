@@ -5,6 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 
 import matplotlib
+import matplotlib.ticker
 
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
@@ -45,17 +46,40 @@ def eue_chart(eue: pd.DataFrame, cfg: dict, path: Path) -> None:
     width = 0.2
     x = np.arange(len(REGIONS))
     t = eue.set_index(["case", "region"])["eue_pct"]
+    floor = 1e-4  # log axis: zero EUE is drawn as a "0" label at the floor
     for i, case in enumerate(CASES):
-        vals = [t.get((case, r), np.nan) for r in REGIONS]
-        ax.bar(x + (i - 1.5) * width, vals, width * 0.9, color=COLOURS[case],
-               label=LABELS[case], edgecolor="white", linewidth=1)  # fmt: off
+        vals = np.array([t.get((case, r), np.nan) for r in REGIONS])
+        xs = x + (i - 1.5) * width
+        ax.bar(
+            xs,
+            np.where(vals > floor, vals, np.nan),
+            width * 0.9,
+            bottom=floor,
+            color=COLOURS[case],
+            label=LABELS[case],
+            edgecolor="white",
+            linewidth=1,
+        )
+        for xi, v in zip(xs, vals, strict=True):
+            if not v > floor:
+                ax.text(xi, floor * 1.15, "0", ha="center", va="bottom", fontsize=7, color=MUTED)
     std = cfg["reliability"]["standard_pct"]
     ax.axhline(std, color=TEXT, linewidth=1, linestyle="--")
-    ax.annotate(f"Reliability standard {std:g} %", (len(REGIONS) - 0.5, std),
-                xytext=(0, 4), textcoords="offset points", ha="right", color=TEXT,
-                fontsize=8)  # fmt: off
+    ax.annotate(
+        f"Reliability standard {std:g} %",
+        (len(REGIONS) - 0.5, std),
+        xytext=(0, 4),
+        textcoords="offset points",
+        ha="right",
+        color=TEXT,
+        fontsize=8,
+    )
+    ax.set_yscale("log")
+    ax.set_ylim(floor, 30)
+    ax.set_xlim(-0.5, len(REGIONS) - 0.5)
+    ax.yaxis.set_major_formatter(matplotlib.ticker.FuncFormatter(lambda v, _: f"{v:g}"))
     ax.set_xticks(x, REGIONS)
-    ax.set_ylabel("Expected unserved energy (% of annual energy)", color=TEXT)
+    ax.set_ylabel("Expected unserved energy (% of annual energy, log scale)", color=TEXT)
     ax.set_title("Expected unserved energy, FY2028-29", color=TEXT, loc="left", fontsize=11)
     ax.legend(frameon=False, fontsize=8, loc="upper left")
     _style(ax)

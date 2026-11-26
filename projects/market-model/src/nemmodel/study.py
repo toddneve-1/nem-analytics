@@ -136,8 +136,10 @@ def eue_table(runs: pd.DataFrame, data: Data, cfg: dict) -> pd.DataFrame:
                     "region": r,
                     "eue_mwh": eue,
                     "eue_pct": 100 * eue / energy[r],
-                    "samples_with_unserved": int((g[f"unserved_mwh_{r}"] > 1).sum()),
-                    "samples": len(g),
+                    "draws_with_unserved": int(
+                        (g.groupby("sample")[f"unserved_mwh_{r}"].max() > 1).sum()
+                    ),
+                    "draws": g["sample"].nunique(),
                 }
             )
     t = pd.DataFrame(rows)

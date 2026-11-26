@@ -14,7 +14,63 @@ demand, wind and solar traces. They are parsed into versioned tables committed i
 simplifications are listed below. See [docs/design_notes.md](docs/design_notes.md) for the
 reasons behind each choice.
 
-<!-- RESULTS -->
+## Results (v0.1)
+
+![Expected unserved energy by region and scenario](docs/figures/eue_by_region.png)
+
+**Expected unserved energy, FY2028-29** (% of regional annual energy; standard 0.002 %). In
+brackets: outage draws, out of 10, with any unserved energy.
+
+| Region | Workbook coal, gas unconstrained | Workbook coal, tight winter gas | Early coal exit, gas unconstrained | Early coal exit, tight winter gas |
+|---|---|---|---|---|
+| QLD1 | 0 (0) | 0 (0) | 0.0005 (5) | 0.0005 (6) |
+| NSW1 | **0.0033** (1) | **0.059** (3) | **0.62** (10) | **2.79** (10) |
+| VIC1 | 0 (0) | **0.26** (10) | 0 (0) | **0.32** (10) |
+| SA1 | **0.050** (1) | **2.04** (10) | **1.17** (10) | **9.25** (10) |
+| TAS1 | 0 (0) | 0 (0) | 0 (0) | 0 (0) |
+
+Bold: above the reliability standard. Full results: [`results/eue.csv`](results/eue.csv) and,
+for every run, [`results/runs.csv`](results/runs.csv).
+
+### Findings
+
+1. **Base case: close to the standard, with the excess driven by one outage draw.** QLD, VIC
+   and TAS have no unserved energy. NSW and SA exceed 0.002 %, but only in one of the ten
+   outage draws; with ten draws, that is not distinguishable from meeting the standard. The
+   model omits several things that would raise EUE (other weather years, long-duration outages,
+   unit commitment), so it should not be read as showing a comfortable margin either.
+2. **Tight winter gas creates shortfalls in Victoria and South Australia in every draw.** With
+   southern gas-powered generation capped at 587 TJ/day from June to August, VIC reaches
+   0.26 % and SA 2.0 %. Here the gas limit drives the result, not unlucky outages: long,
+   still winter periods need more gas than the cap allows.
+3. **Early coal exit moves the problem to New South Wales.** Retiring Bayswater and Vales
+   Point B leaves NSW with only Mt Piper's 1.4 GW of coal. NSW EUE rises to 0.62 % in every
+   draw. Gas fills most of the gap: southern gas burn rises from 33 PJ to 175 PJ a year, and
+   the peak winter day from about 1,500 to 1,850 TJ/day.
+4. **The two risks compound.** With both early exit and tight gas, EUE is far above the sum of
+   the separate effects: NSW 2.8 % against 0.06 % + 0.62 %, and SA 9.2 % against 2.0 % +
+   1.2 %. Early coal retirement is workable here only if winter gas is available, and winter
+   gas is exactly what the GSOO flags as at risk. That interaction is what an integrated
+   gas–electricity assessment exists to catch.
+
+![Unserved energy in each outage sample](docs/figures/unserved_by_sample.png)
+
+10 % and 50 % POE demand give almost identical results. The 10 % POE trace differs from the
+50 % trace only at peaks (about 480 hours in NSW, by up to 1.1 GW, with the same annual energy),
+while the shortfalls here are multi-day energy shortages in winter.
+
+### Sense-check against AEMO publications
+
+| Quantity | This model | Published | Source |
+|---|---|---|---|
+| Victorian reliability, FY2028-29, committed and anticipated fleet | Within the standard (0 % EUE) | No shortfall against the standard until 2030-31 (2025 ESOO, as summarised by the Victorian Auditor-General's Office) | [VAGO](https://audit.vic.gov.au/report/managing-transition-renewable-energy?section=) |
+| Peak winter-day gas for southern gas-powered generation | 1,174 TJ/day with no outages; about 1,500 TJ/day averaged over outage draws | 700 to 1,200 TJ/day | [2025 GSOO webinar](https://www.aemo.com.au/-/media/files/gas/national_planning_and_forecasting/gsoo/2025/2025-gsoo-webinar-presentation.pdf) |
+| Timing of southern peak-day gas risk | Tight case modelled in winter 2028 and 2029 | Peak-day shortfall risk from 2028 | [2025 GSOO](https://www.aemo.com.au/-/media/files/gas/national_planning_and_forecasting/gsoo/2025/2025-gas-statement-of-opportunities.pdf) |
+
+The model's winter gas peak is at or above the top of the GSOO range. That fits a model with no
+unit commitment, which runs gas hard in the few hours it is needed. A region-by-region
+comparison with the ESOO's published EUE figures is the next step; it needs the ESOO data
+workbook, which AEMO's site does not serve to automated downloads.
 
 ## Method
 
