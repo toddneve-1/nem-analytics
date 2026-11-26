@@ -1,0 +1,78 @@
+{
+  "workbook": {
+    "url": "https://data.openisp.au/archive/workbooks/7.5.xlsx",
+    "sha256": "19ccc69cdcfd032c65c508f50650a76a67c2036c4d0e152cce22821957a5c049",
+    "version": "7.5"
+  },
+  "financial_year": "2028-29",
+  "scenario": "Step Change",
+  "fleet": "existing, committed and anticipated (ESOO definition)",
+  "units": 573,
+  "capacity_mw_by_region_group": {
+    "NSW1": {
+      "battery": 4148.4,
+      "biomass": 0.0,
+      "ccgt": 400.0,
+      "coal": 5425.0,
+      "hydro": 2285.0,
+      "liquid": 20.8,
+      "ocgt": 2611.7,
+      "pumped_hydro": 247.0,
+      "recip": 0.0,
+      "solar": 6750.0,
+      "wind": 3529.9
+    },
+    "QLD1": {
+      "battery": 3355.8,
+      "biomass": 32.0,
+      "ccgt": 1597.9,
+      "coal": 8130.0,
+      "hydro": 156.4,
+      "liquid": 423.5,
+      "ocgt": 1663.0,
+      "pumped_hydro": 820.0,
+      "recip": 0.0,
+      "solar": 5926.1,
+      "wind": 3138.0
+    },
+    "SA1": {
+      "battery": 1146.7,
+      "biomass": 0.0,
+      "ccgt": 529.0,
+      "coal": 0.0,
+      "hydro": 0.0,
+      "liquid": 122.9,
+      "ocgt": 1119.3,
+      "pumped_hydro": 0.0,
+      "recip": 210.0,
+      "solar": 713.0,
+      "wind": 2751.9
+    },
+    "TAS1": {
+      "battery": 0.0,
+      "biomass": 0.0,
+      "ccgt": 208.0,
+      "coal": 0.0,
+      "hydro": 2176.7,
+      "liquid": 0.0,
+      "ocgt": 178.0,
+      "pumped_hydro": 0.0,
+      "recip": 0.0,
+      "solar": 360.8,
+      "wind": 582.6
+    },
+    "VIC1": {
+      "battery": 3740.0,
+      "biomass": 0.0,
+      "ccgt": 500.0,
+      "coal": 3370.0,
+      "hydro": 2267.0,
+      "liquid": 0.0,
+      "ocgt": 1900.0,
+      "pumped_hydro": 0.0,
+      "recip": 0.0,
+      "solar": 2477.6,
+      "wind": 6082.5
+    }
+  }
+}

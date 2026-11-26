@@ -1,0 +1,48 @@
+[build-system]
+requires = ["hatchling>=1.24"]
+build-backend = "hatchling.build"
+
+[project]
+name = "nemmodel"
+version = "0.1.0"
+description = "Simplified five-region NEM market and reliability model in PyPSA, with a southern gas constraint"
+readme = "README.md"
+requires-python = ">=3.11"
+license = { text = "MIT" }
+dependencies = [
+    "pypsa>=0.33",
+    "highspy>=1.7",
+    "pandas>=2.2",
+    "numpy>=1.26",
+    "pyarrow>=15",
+    "pyyaml>=6.0",
+    "pydantic>=2.6",
+    "matplotlib>=3.8",
+    "typer>=0.12",
+    "requests>=2.31",
+    "isp-workbook-parser>=2.0",
+    "isp-trace-parser>=1.0",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8.0", "ruff>=0.5"]
+
+[project.scripts]
+nemmodel = "nemmodel.cli:app"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/nemmodel"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "B", "UP", "N", "SIM", "NPY", "RUF"]
+ignore = ["RUF015"]  # [0] on a filtered list reads more plainly here
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-ra --strict-markers"
+markers = ["network: tests that hit external sources (skipped in CI)"]

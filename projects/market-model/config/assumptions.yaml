@@ -1,0 +1,41 @@
+# Modelling assumptions not taken from the IASR workbook. Every value here is a simplification
+# chosen for v0.1 and is listed in the README's assumptions table.
+
+financial_year_end: 2029          # FY2028-29 (1 July 2028 to 30 June 2029), AEST
+scenario: Step Change             # IASR scenario for demand, fuel prices and traces
+inputs: inputs/draft-2026-isp-v7.5
+trace_reference_year: 2018        # one weather year (2024 ISP traces)
+
+reliability:
+  standard_pct: 0.002             # reliability standard: EUE <= 0.002 % of regional energy
+  interim_measure_pct: 0.0006     # Interim Reliability Measure (applies to FY2027-28 and earlier)
+  poe_weights: {POE10: 0.304, POE50: 0.696}   # ESOO weighting of 10 % and 50 % POE demand
+  samples: 10                     # outage samples per POE per scenario
+  seed: 20290630
+
+dispatch:
+  window_hours: 168               # solve in weekly windows with perfect foresight in the week
+  voll: 20000                     # $/MWh cost on unserved energy (well above any SRMC)
+  battery_efficiency: 0.92        # one-way (round trip about 0.85); storage is cyclic per window
+  pumped_hydro_efficiency: 0.87   # one-way (round trip about 0.76)
+  # Conventional hydro: annual energy as a capacity factor, spread evenly over the year as
+  # inflow. Roughly the recent averages for Tasmania and the Snowy/Victorian schemes.
+  hydro_capacity_factor: {TAS1: 0.45, NSW1: 0.15, VIC1: 0.12, QLD1: 0.12}
+  hydro_storage_hours: 168        # each window may borrow from or bank about a week of output
+
+seasons:                          # which workbook rating applies in each calendar month
+  summer: [11, 12, 1, 2, 3]
+  winter: [4, 5, 6, 7, 8, 9, 10]
+
+gas:
+  southern_regions: [NSW1, VIC1, SA1, TAS1]   # GSOO southern system
+  constraint_months: [6, 7, 8]                # winter
+  # Tight-winter case: the gas available to southern gas-powered generation on any winter day,
+  # as a fraction of the most the unconstrained model burns on a winter day. Illustrative for
+  # v0.1; to be calibrated against the GSOO peak-day supply-demand balance.
+  tight_fraction: 0.5
+
+coal_timing:
+  # Early-retirement case: units the workbook closes by the end of this calendar year are
+  # retired before the study year (Gladstone, Callide B, Bayswater, Vales Point B).
+  early_closure_by: 2033

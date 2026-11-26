@@ -1,0 +1,181 @@
+"""The 2 x 2 scenario study: coal retirement timing x winter gas availability.
+
+For each scenario, each demand POE level and each outage sample, the year is dispatched and the
+unserved energy recorded. Expected unserved energy (EUE) for a region is the POE-weighted mean
+over samples, as a percentage of the region's 50 % POE annual operational demand, and is compared
+with the reliability standard (0.002 %) and the Interim Reliability Measure (0.0006 %).
+
+Outage samples use common random numbers: sample ``s`` draws the same outages for every unit in
+every scenario (retired units are simply dropped), so differences between scenarios are not
+sampling noise.
+"""
+
+from __future__ import annotations
+
+import json
+from concurrent.futures import ProcessPoolExecutor
+from dataclasses import dataclass
+from pathlib import Path
+
+import numpy as np
+import pandas as pd
+import yaml
+
+from nemmodel.inputs import ModelYear
+from nemmodel.network import REGIONS, GasConstraint, build_network, daily_southern_gas_tj, solve
+from nemmodel.outages import sample_available_fraction
+from nemmodel.traces import hourly_demand, regional_vre_capacity_factors
+
+COAL_CASES = ["workbook", "early"]
+GAS_CASES = ["unconstrained", "tight"]
+
+
+@dataclass(frozen=True)
+class Case:
+    coal: str
+    gas: str
+
+    @property
+    def name(self) -> str:
+        return f"coal-{self.coal}_gas-{self.gas}"
+
+
+def load_config(path: Path) -> dict:
+    return yaml.safe_load(path.read_text())
+
+
+def fleet(units: pd.DataFrame, coal: str, cfg: dict) -> pd.DataFrame:
+    """Units in service for a coal-timing case."""
+    if coal == "workbook":
+        return units
+    by = cfg["coal_timing"]["early_closure_by"]
+    early = (units["group"] == "coal") & (units["closure_year"] <= by)
+    return units[~early]
+
+
+@dataclass
+class Data:
+    units: pd.DataFrame
+    interconnectors: pd.DataFrame
+    demand: pd.DataFrame
+    vre_cf: pd.DataFrame
+
+
+def load_data(root: Path, cfg: dict, trace_dir: Path) -> Data:
+    inputs = root / cfg["inputs"]
+    units = pd.read_csv(inputs / "units.csv")
+    ics = pd.read_csv(inputs / "interconnectors.csv")
+    year = ModelYear(cfg["financial_year_end"])
+    demand = hourly_demand(trace_dir, year, cfg["scenario"])
+    cf, _ = regional_vre_capacity_factors(trace_dir, units, year)
+    return Data(units, ics, demand, cf)
+
+
+def demand_for(data: Data, poe: str) -> pd.DataFrame:
+    cols = [f"{r}_{poe}" for r in REGIONS]
+    return data.demand[cols].set_axis(REGIONS, axis=1)
+
+
+def run_one(
+    data: Data, cfg: dict, case: Case, poe: str, sample: int | None, gas_cap: float | None
+) -> dict:
+    """Dispatch one year. ``sample`` None means no forced outages."""
+    units = fleet(data.units, case.coal, cfg)
+    dem = demand_for(data, poe)
+    avail = None
+    if sample is not None:
+        rng = np.random.default_rng([cfg["reliability"]["seed"], sample])
+        avail = sample_available_fraction(data.units, len(dem), rng)  # all units: common draws
+    n = build_network(units, data.interconnectors, dem, data.vre_cf, cfg, avail)
+    gas = None
+    if case.gas == "tight":
+        g = cfg["gas"]
+        gas = GasConstraint(g["southern_regions"], g["constraint_months"], gas_cap)
+    solve(n, cfg, gas)
+
+    gen = n.generators_t.p.T.groupby(n.generators["carrier"]).sum().T.sum()
+    sto = n.storage_units_t.p.clip(lower=0).T.groupby(n.storage_units["carrier"]).sum().T.sum()
+    unserved = n.generators_t.p[[f"{r} unserved" for r in REGIONS]].set_axis(REGIONS, axis=1)
+    gas_daily = daily_southern_gas_tj(n, cfg["gas"]["southern_regions"])
+    winter = gas_daily.index.month.isin(cfg["gas"]["constraint_months"])
+    return {
+        "case": case.name,
+        "coal": case.coal,
+        "gas": case.gas,
+        "poe": poe,
+        "sample": sample,
+        **{f"unserved_mwh_{r}": float(unserved[r].sum()) for r in REGIONS},
+        **{f"unserved_hours_{r}": int((unserved[r] > 1e-3).sum()) for r in REGIONS},
+        **{f"gen_twh_{k}": float(v) / 1e6 for k, v in pd.concat([gen, sto]).items()},
+        "gas_max_winter_tj": float(gas_daily[winter].max()),
+        "gas_total_pj": float(gas_daily.sum()) / 1000,
+        "mean_price": {r: float(v) for r, v in n.buses_t.marginal_price.mean().items()},
+    }
+
+
+def _task(args: tuple) -> dict:
+    data, cfg, case, poe, sample, cap = args
+    return run_one(data, cfg, case, poe, sample, cap)
+
+
+def eue_table(runs: pd.DataFrame, data: Data, cfg: dict) -> pd.DataFrame:
+    """EUE (MWh and % of 50 % POE annual energy) by case and region."""
+    w = cfg["reliability"]["poe_weights"]
+    energy = demand_for(data, "POE50").sum()
+    rows = []
+    for case, g in runs.groupby("case"):
+        for r in REGIONS:
+            by_poe = g.groupby("poe")[f"unserved_mwh_{r}"].mean()
+            eue = sum(w[p] * by_poe.get(p, np.nan) for p in w)
+            rows.append(
+                {
+                    "case": case,
+                    "region": r,
+                    "eue_mwh": eue,
+                    "eue_pct": 100 * eue / energy[r],
+                    "samples_with_unserved": int((g[f"unserved_mwh_{r}"] > 1).sum()),
+                    "samples": len(g),
+                }
+            )
+    t = pd.DataFrame(rows)
+    t["meets_standard"] = t["eue_pct"] <= cfg["reliability"]["standard_pct"]
+    t["meets_interim_measure"] = t["eue_pct"] <= cfg["reliability"]["interim_measure_pct"]
+    return t
+
+
+def run_study(
+    root: Path, trace_dir: Path, out_dir: Path, samples: int | None = None, workers: int = 4
+) -> pd.DataFrame:
+    cfg = load_config(root / "config" / "assumptions.yaml")
+    data = load_data(root, cfg, trace_dir)
+    samples = samples or cfg["reliability"]["samples"]
+    out_dir.mkdir(parents=True, exist_ok=True)
+
+    # Calibrate the tight-winter gas allowance on the workbook fleet, 10 % POE, no outages.
+    ref = run_one(data, cfg, Case("workbook", "unconstrained"), "POE10", None, None)
+    cap = cfg["gas"]["tight_fraction"] * ref["gas_max_winter_tj"]
+    (out_dir / "gas_calibration.json").write_text(
+        json.dumps(
+            {
+                "reference_max_winter_day_tj": ref["gas_max_winter_tj"],
+                "tight_fraction": cfg["gas"]["tight_fraction"],
+                "tight_cap_tj_per_day": cap,
+            },
+            indent=2,
+        )
+    )
+
+    tasks = [
+        (data, cfg, Case(c, g), poe, s, cap)
+        for c in COAL_CASES
+        for g in GAS_CASES
+        for poe in cfg["reliability"]["poe_weights"]
+        for s in range(samples)
+    ]
+    with ProcessPoolExecutor(max_workers=workers) as ex:
+        results = list(ex.map(_task, tasks))
+    runs = pd.DataFrame(results)
+    runs.drop(columns="mean_price").to_csv(out_dir / "runs.csv", index=False)
+    eue = eue_table(runs, data, cfg)
+    eue.to_csv(out_dir / "eue.csv", index=False)
+    return eue
