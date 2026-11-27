@@ -15,7 +15,8 @@ from __future__ import annotations
 import json
 import logging
 import multiprocessing as mp
-from concurrent.futures import ProcessPoolExecutor
+import time
+from concurrent.futures import FIRST_COMPLETED, ProcessPoolExecutor, wait
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -212,18 +213,50 @@ def tight_gas_cap(root: Path, cfg: dict, data: Data, out_dir: Path) -> float | p
     return cap
 
 
+def _fingerprint(root: Path, cfg: dict) -> str:
+    """Hash of the configuration and input files, so saved runs from another set-up are not
+    mixed into a resumed study."""
+    import hashlib
+
+    h = hashlib.sha256(json.dumps(cfg, sort_keys=True, default=str).encode())
+    for f in [*sorted((root / cfg["inputs"]).glob("*.csv")), root / "config" / "gas_balance.yaml"]:
+        h.update(f.read_bytes())
+    return h.hexdigest()[:16]
+
+
+def _key(case: str, poe: str, reference_year: int, sample: int) -> str:
+    return f"{case}|{poe}|{reference_year}|{sample}"
+
+
 def run_study(
-    root: Path, out_dir: Path, samples: int | None = None, workers: int = 3
-) -> pd.DataFrame:
+    root: Path,
+    out_dir: Path,
+    samples: int | None = None,
+    workers: int = 3,
+    max_minutes: float | None = None,
+) -> pd.DataFrame | None:
     """The 2 x 2 study over every weather year, with ``samples`` outage draws per weather year
-    and POE level."""
+    and POE level.
+
+    Resumable: each finished run is appended to ``runs_partial.jsonl`` at once, and runs already
+    there (from the same configuration and inputs) are skipped. With ``max_minutes``, no new
+    runs start after that time; call again to continue. Returns the EUE table once every run is
+    done, otherwise None.
+    """
     cfg = load_config(root / "config" / "assumptions.yaml")
     data = load_data(root, cfg)
     samples = samples or cfg["reliability"]["samples"]
     out_dir.mkdir(parents=True, exist_ok=True)
+    fingerprint = _fingerprint(root, cfg)
+    partial = out_dir / "runs_partial.jsonl"
+    done = {}
+    if partial.exists():
+        for line in partial.read_text().splitlines():
+            r = json.loads(line)
+            if r.get("fingerprint") == fingerprint:
+                done[_key(r["case"], r["poe"], r["reference_year"], r["sample"])] = r
 
     cap = tight_gas_cap(root, cfg, data, out_dir)
-
     tasks = [
         (data, cfg, Case(c, g), poe, ref, s, cap)
         for c in COAL_CASES
@@ -232,19 +265,45 @@ def run_study(
         for ref in data.reference_years
         for s in range(samples)
     ]
+    todo = [t for t in tasks if _key(t[2].name, t[3], t[4], t[5]) not in done]
+    print(f"{len(tasks)} runs: {len(done)} already done, {len(todo)} to run", flush=True)
+
+    deadline = time.monotonic() + 60 * max_minutes if max_minutes else None
     # "spawn", not fork: the parent has already run HiGHS, and forked children can deadlock.
-    # Each worker peaks at about 3.3 GB during the whole-year hydro plan, so three workers fit
-    # in 15 GB; workers are replaced after a few runs so memory does not creep up.
-    with ProcessPoolExecutor(
-        max_workers=workers, mp_context=mp.get_context("spawn"), max_tasks_per_child=4
-    ) as ex:
-        results = []
-        for i, r in enumerate(ex.map(_task, tasks), 1):
-            results.append(r)
-            print(f"[{i}/{len(tasks)}] {r['case']} {r['poe']} weather {r['reference_year']} "
-                  f"sample {r['sample']}", flush=True)  # fmt: off
-    runs = pd.DataFrame(results)
-    runs.drop(columns="mean_price").to_csv(out_dir / "runs.csv", index=False)
+    # Each worker peaks at about 3 GB during the whole-year hydro plan, so three workers fit in
+    # 15 GB; workers are replaced after a few runs so memory does not creep up.
+    with (
+        ProcessPoolExecutor(
+            max_workers=workers, mp_context=mp.get_context("spawn"), max_tasks_per_child=4
+        ) as ex,
+        partial.open("a") as f,
+    ):
+        pending = set()
+        queue = list(todo)
+        while queue or pending:
+            while (
+                queue and len(pending) < workers and not (deadline and time.monotonic() > deadline)
+            ):
+                pending.add(ex.submit(_task, queue.pop(0)))
+            if not pending:
+                break  # out of time: stop starting new runs
+            finished, pending = wait(pending, return_when=FIRST_COMPLETED)
+            for fut in finished:
+                r = fut.result()
+                r.pop("mean_price", None)
+                r["fingerprint"] = fingerprint
+                f.write(json.dumps(r) + "\n")
+                f.flush()
+                done[_key(r["case"], r["poe"], r["reference_year"], r["sample"])] = r
+                print(f"[{len(done)}/{len(tasks)}] {r['case']} {r['poe']} weather "
+                      f"{r['reference_year']} sample {r['sample']}", flush=True)  # fmt: off
+
+    if len(done) < len(tasks):
+        print(f"stopped with {len(done)}/{len(tasks)} runs done; run again to continue")
+        return None
+    runs = pd.DataFrame(done.values()).drop(columns="fingerprint")
+    runs = runs.sort_values(["case", "poe", "reference_year", "sample"])
+    runs.to_csv(out_dir / "runs.csv", index=False)
     eue = eue_table(runs, data, cfg)
     eue.to_csv(out_dir / "eue.csv", index=False)
     return eue

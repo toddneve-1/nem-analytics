@@ -67,13 +67,20 @@ def build_inputs(
 
 
 @app.command()
-def study(samples: int = 0, workers: int = 3, out: Path = ROOT / "results") -> None:
-    """Run the 2 x 2 study (coal timing x winter gas) with Monte Carlo outages."""
+def study(
+    samples: int = 0,
+    workers: int = 3,
+    max_minutes: float = typer.Option(0, help="Stop starting new runs after this; rerun to resume"),
+    out: Path = ROOT / "results",
+) -> None:
+    """Run the 2 x 2 study (coal timing x winter gas) over every weather year, with Monte Carlo
+    outages. Resumable: finished runs are saved as they complete and skipped on the next call."""
     from nemmodel.study import run_study
 
     logging.disable(logging.WARNING)
-    eue = run_study(ROOT, out, samples or None, workers)
-    typer.echo(eue.to_string(index=False))
+    eue = run_study(ROOT, out, samples or None, workers, max_minutes or None)
+    if eue is not None:
+        typer.echo(eue.to_string(index=False))
 
 
 @app.command()
