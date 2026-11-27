@@ -31,12 +31,33 @@ lists the simplifications. Later versions deepen the parts that matter most for 
 
 ## Dispatch
 
-* **Linear programme, weekly windows.** A full-year LP takes about 75 seconds, so the study
-  (80 runs) takes about 25 minutes on four cores. Weekly windows keep each LP small. Storage
-  (including conventional hydro) is cyclic within each window: a battery cannot carry energy
-  from one week to the next, and hydro uses one week of average inflow per week. This is
-  simpler than ESOO practice (which models hydro storage over the year) and is optimistic
-  within a week because of perfect foresight.
+* **Two-stage solve (updated after v0.1).** v0.1 solved the year in weekly windows with every
+  store, hydro included, returning to its starting level each week, so dams could not save water
+  for winter. Measured on the base case: a single whole-year solve takes about 40 seconds, faster
+  than 52 weekly solves (about 73 seconds), because building each problem costs more than solving
+  it. But whole-year foresight would let batteries and gas plan around every still week of the
+  year. The model now uses two stages:
+  1. **Plan:** a whole-year solve sets the level of the two large hydro schemes through the
+     year. Each starts and ends the year half full and is never drawn below 20 %.
+  2. **Dispatch:** weekly windows. Batteries, pumped hydro and small hydro return to their
+     starting level each week (a weekly reset does little harm to batteries that cycle daily);
+     the large schemes start and end each week at the planned level.
+
+  One year now takes about 136 seconds. The plan still has perfect foresight of the year's
+  weather and outages, which real operators lack, so it remains optimistic.
+* **Hydro inflows from the workbook.** Tasmania: monthly inflow energy (GWh) for the whole
+  scheme, for the trace weather year (FY2018: 9,122 GWh). Snowy: the workbook gives
+  representative monthly inflows in gigalitres for weather variability only, so the model takes
+  their monthly shape and scales it to an assumed 13 % capacity factor (about 4.2 TWh a year).
+  Snowy is split between its NSW stations (Tumut 3, Upper Tumut, Guthega) and VIC stations
+  (Murray 1 and 2), each with its share of the water; in reality they share reservoirs. Smaller
+  irrigation and run-of-river stations keep a flat inflow (15 % capacity factor) and weekly
+  storage.
+* **Storage sizes.** Tasmania 14,400 GWh, derived from the Tasmanian Economic Regulator's
+  November 2025 figure (7,347 GWh = 50.9 % of capacity). Snowy has no published energy capacity
+  (its active storage is about 5,300 GL, enough for several years), so it is given one year of
+  its output. The 50 % starting level and 20 % floor are assumptions, the floor standing in for
+  water held back against drought.
 * **No unit commitment.** No minimum loads, ramp limits or start costs. Coal can follow demand
   freely, which understates the need for flexible gas.
 * **No network losses or intra-regional limits.**

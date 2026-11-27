@@ -308,6 +308,34 @@ def load_interconnectors(parser, year: ModelYear) -> pd.DataFrame:
     return df
 
 
+# Monthly hydro inflow tables used by the model, and their units in the workbook.
+HYDRO_INFLOW_TABLES = {
+    "tasmania": ("hydro_inflows_tas", "GWh"),
+    "snowy": ("hydro_inflows_snowy", "GL (representative; shape only)"),
+}
+MONTHS = ["Jul", "Aug", "Sep", "Oct", "Nov", "Dec", "Jan", "Feb", "Mar", "Apr", "May", "Jun"]
+
+
+def load_hydro_inflows(parser) -> pd.DataFrame:
+    """Monthly inflows by scheme and weather reference year (financial year ending).
+
+    Tasmania is given in GWh for the whole Hydro Tasmania scheme. Snowy is given in GL and AEMO
+    describes it as representative of weather variability only, so the model uses its monthly
+    shape, not its level.
+    """
+    rows = []
+    for scheme, (table, unit) in HYDRO_INFLOW_TABLES.items():
+        t = parser.get_table(table)
+        ref = pd.to_numeric(t["Reference Year (FYE)"], errors="coerce")
+        for year, (_, r) in zip(ref, t.iterrows(), strict=True):
+            if pd.isna(year):
+                continue  # e.g. the "2007 (Dry)" sensitivity row
+            for m in MONTHS:
+                rows.append({"scheme": scheme, "unit": unit, "reference_year": int(year),
+                             "month": m, "inflow": float(r[m])})  # fmt: off
+    return pd.DataFrame(rows)
+
+
 def write_inputs(
     workbook: Path, out_dir: Path, year: ModelYear, scenario: str, source_url: str
 ) -> dict:
@@ -320,6 +348,7 @@ def write_inputs(
     ics = load_interconnectors(parser, year)
     units.to_csv(out_dir / "units.csv", index=False)
     ics.to_csv(out_dir / "interconnectors.csv", index=False)
+    load_hydro_inflows(parser).to_csv(out_dir / "hydro_inflows.csv", index=False)
     manifest = {
         "workbook": {
             "url": source_url,

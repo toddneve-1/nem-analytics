@@ -14,14 +14,32 @@ reliability:
   seed: 20290630
 
 dispatch:
-  window_hours: 168               # solve in weekly windows with perfect foresight in the week
+  window_hours: 168               # stage 2: weekly windows with perfect foresight in the week
   voll: 20000                     # $/MWh cost on unserved energy (well above any SRMC)
   battery_efficiency: 0.92        # one-way (round trip about 0.85); storage is cyclic per window
   pumped_hydro_efficiency: 0.87   # one-way (round trip about 0.76)
-  # Conventional hydro: annual energy as a capacity factor, spread evenly over the year as
-  # inflow. Roughly the recent averages for Tasmania and the Snowy/Victorian schemes.
-  hydro_capacity_factor: {TAS1: 0.45, NSW1: 0.15, VIC1: 0.12, QLD1: 0.12}
-  hydro_storage_hours: 168        # each window may borrow from or bank about a week of output
+
+# Conventional hydro. The two large schemes are planned over the whole year (stage 1 of the
+# solve) and then dispatched week by week following that plan (stage 2); smaller schemes are
+# treated like storage that returns to its starting level each week.
+hydro:
+  tasmania:
+    region: TAS1                  # all Tasmanian hydro units
+    # Monthly inflow energy (GWh) from the workbook for the trace weather year.
+    storage_gwh: 14400            # about 7,347 GWh = 50.9 % of capacity (Tas. Economic Regulator)
+    start_level: 0.5              # start and end the year half full (51 % in November 2025)
+    min_level: 0.2                # reserve held back for drought; never drawn below. Assumption
+  snowy:
+    stations: [Tumut 3, Upper Tumut, Guthega, Murray 1, Murray 2]   # NSW1 and VIC1
+    # The workbook's Snowy inflows are representative only, so they set the monthly shape and
+    # this capacity factor sets the annual energy (about 4.2 TWh). Assumption.
+    capacity_factor: 0.13
+    storage_years: 1.0            # storage of one year's output (the scheme stores years). Assumption
+    start_level: 0.5              # Assumption
+    min_level: 0.2                # Assumption
+  other:
+    capacity_factor: 0.15         # irrigation and run-of-river stations, flat inflow. Assumption
+    storage_hours: 168            # returns to its starting level each week
 
 seasons:                          # which workbook rating applies in each calendar month
   summer: [11, 12, 1, 2, 3]

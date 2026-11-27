@@ -160,3 +160,62 @@ def test_eue_weighting(cfg):
     assert t.loc["SA1", "eue_pct"] == pytest.approx(100 * 0.304 / 1000)
     assert not t.loc["SA1", "meets_standard"]
     assert t.loc["NSW1", "meets_standard"]
+
+
+def test_monthly_inflow_spread_evenly():
+    from nemmodel.network import monthly_inflow_mw
+
+    t = pd.DataFrame({"scheme": "s", "reference_year": 2018, "month": ["Jul", "Aug"],
+                      "inflow": [744.0, 0.0]})  # fmt: off
+    idx = pd.date_range("2028-07-01", "2028-08-31 23:00", freq="h")
+    mw = monthly_inflow_mw(t, "s", 2018, idx)
+    assert mw.loc["2028-07"].eq(1000.0).all()  # 744 GWh over 744 hours
+    assert mw.loc["2028-08"].eq(0.0).all()
+
+
+def test_seasonal_hydro_carries_water_between_windows(cfg, tiny):
+    """Water arriving on day 1 is needed on day 3. Weekly-style windows (here 24 h) cannot move
+    it; the whole-period plan can."""
+    import copy
+
+    cfg = copy.deepcopy(cfg)
+    cfg["dispatch"]["window_hours"] = 24
+    cfg["hydro"]["tasmania"].update(storage_gwh=10.0, start_level=0.0, min_level=0.0)
+    idx = pd.date_range("2028-07-01", periods=72, freq="h")
+    units = pd.DataFrame([unit("H1", "TAS1", "hydro", 200, 0)])
+    demand = pd.DataFrame(0.0, index=idx, columns=["QLD1", "NSW1", "VIC1", "SA1", "TAS1"])
+    demand.loc[idx[48:], "TAS1"] = 100.0  # 2,400 MWh needed on day 3
+    inflows = pd.DataFrame({"scheme": "tasmania", "reference_year": cfg["trace_reference_year"],
+                            "month": ["Jul"], "inflow": [0.0]})  # fmt: off
+    n = build_network(units, tiny["ics"].iloc[0:0], demand, pd.DataFrame(index=idx), cfg,
+                      hydro_inflows=inflows)  # fmt: off
+    # Replace the monthly inflow with 2,400 MWh arriving in the first 24 hours.
+    n.storage_units_t.inflow = pd.DataFrame(
+        {"TAS1 tasmania hydro": np.where(np.arange(72) < 24, 100.0, 0.0)}, index=idx
+    )
+    solve(n, cfg)
+    assert n.generators_t.p["TAS1 unserved"].sum() == pytest.approx(0, abs=1e-3)
+    soc = n.storage_units_t.state_of_charge["TAS1 tasmania hydro"]
+    plan = n.seasonal_plan["TAS1 tasmania hydro"]
+    assert soc.iloc[[23, 47, 71]].to_numpy() == pytest.approx(plan.iloc[[23, 47, 71]].to_numpy())
+
+
+def test_seasonal_hydro_respects_floor_and_returns_to_start(cfg, tiny):
+    import copy
+
+    cfg = copy.deepcopy(cfg)
+    cfg["dispatch"]["window_hours"] = 24
+    cfg["hydro"]["tasmania"].update(storage_gwh=10.0, start_level=0.5, min_level=0.3)
+    idx = pd.date_range("2028-07-01", periods=72, freq="h")
+    units = pd.DataFrame([unit("H1", "TAS1", "hydro", 500, 0)])
+    demand = pd.DataFrame(0.0, index=idx, columns=["QLD1", "NSW1", "VIC1", "SA1", "TAS1"])
+    demand["TAS1"] = 200.0  # 14.4 GWh wanted; only 2 GWh may be drawn (5 GWh start, 3 floor)
+    inflows = pd.DataFrame({"scheme": "tasmania", "reference_year": cfg["trace_reference_year"],
+                            "month": ["Jul"], "inflow": [0.0]})  # fmt: off
+    n = build_network(units, tiny["ics"].iloc[0:0], demand, pd.DataFrame(index=idx), cfg,
+                      hydro_inflows=inflows)  # fmt: off
+    solve(n, cfg)
+    soc = n.storage_units_t.state_of_charge["TAS1 tasmania hydro"]
+    assert soc.min() >= 3000 - 1e-3
+    assert soc.iloc[-1] == pytest.approx(5000)  # ends where it started, so nothing is drawn
+    assert n.generators_t.p["TAS1 unserved"].sum() == pytest.approx(14400)

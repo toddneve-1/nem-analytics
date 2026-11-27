@@ -29,7 +29,9 @@ import xarray as xr
 REGIONS = ["QLD1", "NSW1", "VIC1", "SA1", "TAS1"]
 THERMAL = ["coal", "ccgt", "ocgt", "recip", "liquid", "biomass"]
 GAS_GROUPS = ["ccgt", "ocgt", "recip"]
+SEASONAL = "seasonal_hydro"  # storage planned over the whole year (Tasmania, Snowy)
 warnings.filterwarnings("ignore", message=".*absent slots.*")
+warnings.filterwarnings("ignore", message=".*NaN in the constraint RHS.*")
 WHEEL_COST = 0.01  # $/MWh on interconnector flow, to stop flows that serve no purpose
 
 
@@ -67,6 +69,22 @@ def unit_ratings(units: pd.DataFrame, index: pd.DatetimeIndex, cfg: dict) -> pd.
     return pd.DataFrame(out, index=index, columns=units["unit_id"].to_numpy())
 
 
+def monthly_inflow_mw(
+    inflows: pd.DataFrame, scheme: str, reference_year: int, index: pd.DatetimeIndex
+) -> pd.Series:
+    """Hourly inflow (MW) from monthly inflow energy (GWh), spread evenly within each month.
+
+    The weather reference year is a financial year (July to June), matched to the model's
+    months by calendar month."""
+    t = inflows[(inflows["scheme"] == scheme) & (inflows["reference_year"] == reference_year)]
+    if t.empty:
+        raise ValueError(f"no {scheme} inflows for reference year {reference_year}")
+    gwh = t.set_index("month")["inflow"]
+    month = index.strftime("%b")
+    hours_in_month = pd.Series(1, index=index).groupby([index.year, index.month]).transform("sum")
+    return pd.Series(gwh.reindex(month).to_numpy() * 1000, index=index) / hours_in_month
+
+
 def build_network(
     units: pd.DataFrame,
     interconnectors: pd.DataFrame,
@@ -74,10 +92,12 @@ def build_network(
     vre_cf: pd.DataFrame,
     cfg: dict,
     available: pd.DataFrame | None = None,
+    hydro_inflows: pd.DataFrame | None = None,
 ) -> pypsa.Network:
     """Network over ``demand.index`` (hourly). ``demand`` has one column per region (MW).
     ``available`` is the sampled available fraction per unit (hours x unit_id); None means no
-    forced outages."""
+    forced outages. ``hydro_inflows`` is the workbook's monthly inflow table; it is required if
+    the fleet has Tasmanian or Snowy hydro."""
     idx = demand.index
     d = cfg["dispatch"]
     n = pypsa.Network()
@@ -89,6 +109,7 @@ def build_network(
         "battery",
         "pumped_hydro",
         "hydro",
+        SEASONAL,
         "wind",
         "solar",
         *THERMAL,
@@ -152,7 +173,7 @@ def build_network(
         carrier: str,
         eff: float,
         max_hours: float,
-        inflow: float = 0.0,
+        inflow: float | pd.Series = 0.0,
         pump: bool = True,
     ) -> None:
         avail_mw = mw[g["unit_id"]].sum(axis=1)
@@ -191,19 +212,46 @@ def build_network(
             d["pumped_hydro_efficiency"],
             hours,
         )
-    for region, g in units[units["group"] == "hydro"].groupby("region"):
-        cf = d["hydro_capacity_factor"].get(region, 0.0)
-        inflow = cf * float(g["capacity_mw"].sum())
-        add_storage(
-            f"{region} hydro",
-            region,
-            g,
-            "hydro",
-            1.0,
-            d["hydro_storage_hours"],
-            inflow=inflow,
-            pump=False,
-        )
+    # Conventional hydro: Tasmania and Snowy are seasonal storage; the rest weekly.
+    h = cfg["hydro"]
+    levels: dict[str, dict] = {}
+    hydro = units[units["group"] == "hydro"]
+    is_tas = hydro["region"] == h["tasmania"]["region"]
+    is_snowy = hydro["station"].isin(h["snowy"]["stations"])
+    if (is_tas | is_snowy).any() and hydro_inflows is None:
+        raise ValueError("hydro_inflows is required for Tasmanian and Snowy hydro")
+
+    if is_tas.any():
+        g = hydro[is_tas]
+        energy = monthly_inflow_mw(hydro_inflows, "tasmania", cfg["trace_reference_year"], idx)
+        p_nom = float(mw[g["unit_id"]].sum(axis=1).max())
+        levels[f"{h['tasmania']['region']} tasmania hydro"] = h["tasmania"]
+        add_storage(f"{h['tasmania']['region']} tasmania hydro", h["tasmania"]["region"], g,
+                    SEASONAL, 1.0, h["tasmania"]["storage_gwh"] * 1000 / p_nom,
+                    inflow=energy, pump=False)  # fmt: off
+    if is_snowy.any():
+        shape = monthly_inflow_mw(hydro_inflows, "snowy", cfg["trace_reference_year"], idx)
+        shape = shape / shape.mean()  # representative only: keep the monthly pattern
+        for region, g in hydro[is_snowy].groupby("region"):
+            mean_mw = h["snowy"]["capacity_factor"] * float(g["capacity_mw"].sum())
+            p_nom = float(mw[g["unit_id"]].sum(axis=1).max())
+            levels[f"{region} snowy hydro"] = h["snowy"]
+            add_storage(f"{region} snowy hydro", region, g, SEASONAL, 1.0,
+                        h["snowy"]["storage_years"] * 8760 * mean_mw / p_nom,
+                        inflow=shape * mean_mw, pump=False)  # fmt: off
+    for region, g in hydro[~is_tas & ~is_snowy].groupby("region"):
+        inflow = h["other"]["capacity_factor"] * float(g["capacity_mw"].sum())
+        add_storage(f"{region} hydro", region, g, "hydro", 1.0, h["other"]["storage_hours"],
+                    inflow=inflow, pump=False)  # fmt: off
+
+    # Seasonal storage: start and end the year at a set level, never below a floor.
+    for name, c in levels.items():
+        if name in n.storage_units.index:
+            energy = n.storage_units.at[name, "p_nom"] * n.storage_units.at[name, "max_hours"]
+            n.storage_units.at[name, "cyclic_state_of_charge"] = False
+            n.storage_units.at[name, "state_of_charge_initial"] = c["start_level"] * energy
+    n.seasonal_levels = {k: (v["start_level"], v["min_level"]) for k, v in levels.items()
+                         if k in n.storage_units.index}  # fmt: off
 
     # Interconnectors: seasonal limits.
     summer = idx.month.isin(cfg["seasons"]["summer"])
@@ -235,8 +283,31 @@ def _gas_tj(n: pypsa.Network, gens: pd.Index) -> pd.Series:
     return 3.6 / n.generators.loc[gens, "efficiency"] / 1000.0
 
 
+def _optimise(n: pypsa.Network, sns: pd.Index, extra) -> None:
+    status, cond = n.optimize(
+        snapshots=sns,
+        solver_name="highs",
+        solver_options={"output_flag": False, "threads": 1},
+        extra_functionality=extra,
+        include_objective_constant=False,
+        progress=False,
+    )
+    if status != "ok":
+        raise RuntimeError(f"window starting {sns[0]}: {status} ({cond})")
+
+
 def solve(n: pypsa.Network, cfg: dict, gas: GasConstraint | None = None) -> pypsa.Network:
-    """Solve in consecutive windows of ``cfg['dispatch']['window_hours']`` hours."""
+    """Dispatch the year in two stages.
+
+    1. **Plan:** one solve over the whole year sets the level of the seasonal hydro storage
+       (Tasmania, Snowy) through the year: it starts and ends at the configured level and never
+       falls below the configured floor.
+    2. **Dispatch:** consecutive windows of ``cfg['dispatch']['window_hours']`` hours. Batteries,
+       pumped hydro and small hydro return to their starting level in each window; seasonal
+       hydro starts and ends each window at the level the plan set.
+
+    Without seasonal storage, only stage 2 runs.
+    """
     hours = cfg["dispatch"]["window_hours"]
     gens = southern_gas_generators(n, gas.regions) if gas else pd.Index([])
     tj = _gas_tj(n, gens) if gas else None
@@ -257,18 +328,45 @@ def solve(n: pypsa.Network, cfg: dict, gas: GasConstraint | None = None) -> pyps
         daily = (p * coef).sum(dim).groupby(day).sum()
         n.model.add_constraints(daily <= gas.cap_tj_per_day, name="southern_gas_daily")
 
+    seasonal = n.storage_units.index[n.storage_units["carrier"] == SEASONAL]
+    energy = n.storage_units.loc[seasonal, "p_nom"] * n.storage_units.loc[seasonal, "max_hours"]
+    floor = pd.Series({k: getattr(n, "seasonal_levels", {}).get(k, (0, 0))[1] for k in seasonal})
+
+    def extra(n: pypsa.Network, sns: pd.Index) -> None:
+        if gas:
+            gas_cap(n, sns)
+        if len(seasonal):
+            soc = n.model["StorageUnit-state_of_charge"]
+            dim = next(d for d in soc.dims if d != "snapshot")
+            low = xr.DataArray((floor * energy).to_numpy(), coords={dim: list(seasonal)}, dims=dim)
+            n.model.add_constraints(soc.sel({dim: list(seasonal)}) >= low, name="seasonal_floor")
+
+    plan = None
+    if len(seasonal):
+        # Stage 1: the whole year, ending at the starting level.
+        targets = pd.DataFrame(np.nan, index=n.snapshots, columns=seasonal)
+        targets.iloc[-1] = n.storage_units.loc[seasonal, "state_of_charge_initial"]
+        n.storage_units_t.state_of_charge_set = targets
+        start_level = n.storage_units.loc[seasonal, "state_of_charge_initial"].copy()
+        _optimise(n, n.snapshots, extra)
+        plan = n.storage_units_t.state_of_charge[seasonal].copy()
+
     for start in range(0, len(n.snapshots), hours):
         sns = n.snapshots[start : start + hours]
-        status, cond = n.optimize(
-            snapshots=sns,
-            solver_name="highs",
-            solver_options={"output_flag": False, "threads": 1},
-            extra_functionality=gas_cap if gas else None,
-            include_objective_constant=False,
-            progress=False,
-        )
-        if status != "ok":
-            raise RuntimeError(f"window starting {sns[0]}: {status} ({cond})")
+        if plan is not None:
+            before = start_level if start == 0 else plan.iloc[start - 1]
+            n.storage_units.loc[seasonal, "state_of_charge_initial"] = before
+            if start > 0:
+                n.storage_units_t.state_of_charge.loc[n.snapshots[start - 1], seasonal] = before
+            targets = pd.DataFrame(np.nan, index=n.snapshots, columns=seasonal)
+            targets.loc[sns[-1]] = plan.loc[sns[-1]]
+            n.storage_units_t.state_of_charge_set = targets
+        _optimise(n, sns, extra)  # stage 2
+
+    if plan is not None:
+        n.storage_units.loc[seasonal, "state_of_charge_initial"] = start_level
+        n.storage_units_t.state_of_charge_set = pd.DataFrame(index=n.snapshots)
+        n.seasonal_plan = plan  # kept for inspection and tests
     return n
 
 

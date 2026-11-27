@@ -1,0 +1,361 @@
+scheme,unit,reference_year,month,inflow
+tasmania,GWh,2011,Jul,966.8403598
+tasmania,GWh,2011,Aug,1498.34206
+tasmania,GWh,2011,Sep,1492.919351
+tasmania,GWh,2011,Oct,874.6877721
+tasmania,GWh,2011,Nov,772.5214388
+tasmania,GWh,2011,Dec,821.150597
+tasmania,GWh,2011,Jan,484.1509628
+tasmania,GWh,2011,Feb,305.2923352
+tasmania,GWh,2011,Mar,603.1480143
+tasmania,GWh,2011,Apr,545.1219151
+tasmania,GWh,2011,May,487.2055271
+tasmania,GWh,2011,Jun,1423.261599
+tasmania,GWh,2012,Jul,1431.775577
+tasmania,GWh,2012,Aug,1668.225682
+tasmania,GWh,2012,Sep,1028.304745
+tasmania,GWh,2012,Oct,648.5526312
+tasmania,GWh,2012,Nov,660.5302876
+tasmania,GWh,2012,Dec,278.3852581
+tasmania,GWh,2012,Jan,124.3911787
+tasmania,GWh,2012,Feb,113.5602427
+tasmania,GWh,2012,Mar,400.4142491
+tasmania,GWh,2012,Apr,569.0477337
+tasmania,GWh,2012,May,1107.349371
+tasmania,GWh,2012,Jun,1118.209026
+tasmania,GWh,2013,Jul,955.0141753
+tasmania,GWh,2013,Aug,1419.166037
+tasmania,GWh,2013,Sep,1363.469182
+tasmania,GWh,2013,Oct,670.2616505
+tasmania,GWh,2013,Nov,286.5556051
+tasmania,GWh,2013,Dec,235.0462017
+tasmania,GWh,2013,Jan,68.11989342
+tasmania,GWh,2013,Feb,21.28265508
+tasmania,GWh,2013,Mar,318.082153
+tasmania,GWh,2013,Apr,423.3338897
+tasmania,GWh,2013,May,763.0879743
+tasmania,GWh,2013,Jun,507.2681321
+tasmania,GWh,2014,Jul,1508.685821
+tasmania,GWh,2014,Aug,2516.941418
+tasmania,GWh,2014,Sep,1307.979041
+tasmania,GWh,2014,Oct,1664.033523
+tasmania,GWh,2014,Nov,765.6738168
+tasmania,GWh,2014,Dec,451.9619796
+tasmania,GWh,2014,Jan,309.1096431
+tasmania,GWh,2014,Feb,109.4570415
+tasmania,GWh,2014,Mar,237.9654336
+tasmania,GWh,2014,Apr,516.2886874
+tasmania,GWh,2014,May,911.6123739
+tasmania,GWh,2014,Jun,845.3087394
+tasmania,GWh,2015,Jul,1364.318408
+tasmania,GWh,2015,Aug,1090.349848
+tasmania,GWh,2015,Sep,690.5816741
+tasmania,GWh,2015,Oct,725.6346676
+tasmania,GWh,2015,Nov,446.4419308
+tasmania,GWh,2015,Dec,267.3327586
+tasmania,GWh,2015,Jan,389.044772
+tasmania,GWh,2015,Feb,62.14425881
+tasmania,GWh,2015,Mar,441.1010667
+tasmania,GWh,2015,Apr,232.3574205
+tasmania,GWh,2015,May,1385.821656
+tasmania,GWh,2015,Jun,1018.376942
+tasmania,GWh,2016,Jul,1050.726332
+tasmania,GWh,2016,Aug,1380.498657
+tasmania,GWh,2016,Sep,660.8598119
+tasmania,GWh,2016,Oct,166.6094871
+tasmania,GWh,2016,Nov,211.4976619
+tasmania,GWh,2016,Dec,209.6542649
+tasmania,GWh,2016,Jan,158.3102239
+tasmania,GWh,2016,Feb,148.8798034
+tasmania,GWh,2016,Mar,175.6316303
+tasmania,GWh,2016,Apr,345.338698
+tasmania,GWh,2016,May,2027.895406
+tasmania,GWh,2016,Jun,2056.324848
+tasmania,GWh,2017,Jul,2185.843385
+tasmania,GWh,2017,Aug,1429.790216
+tasmania,GWh,2017,Sep,937.2176899
+tasmania,GWh,2017,Oct,1970.938406
+tasmania,GWh,2017,Nov,996.8521377
+tasmania,GWh,2017,Dec,403.1304443
+tasmania,GWh,2017,Jan,191.3495528
+tasmania,GWh,2017,Feb,201.7653737
+tasmania,GWh,2017,Mar,121.5478172
+tasmania,GWh,2017,Apr,276.6015514
+tasmania,GWh,2017,May,701.1946116
+tasmania,GWh,2017,Jun,581.0270367
+tasmania,GWh,2018,Jul,1147.930016
+tasmania,GWh,2018,Aug,1380.015292
+tasmania,GWh,2018,Sep,1622.545017
+tasmania,GWh,2018,Oct,790.5786221
+tasmania,GWh,2018,Nov,286.2333785
+tasmania,GWh,2018,Dec,422.4299696
+tasmania,GWh,2018,Jan,88.57382931
+tasmania,GWh,2018,Feb,213.9550519
+tasmania,GWh,2018,Mar,534.9530003
+tasmania,GWh,2018,Apr,611.7403658
+tasmania,GWh,2018,May,949.5010346
+tasmania,GWh,2018,Jun,1073.803003
+tasmania,GWh,2019,Jul,2010.469818
+tasmania,GWh,2019,Aug,1739.490578
+tasmania,GWh,2019,Sep,974.0168037
+tasmania,GWh,2019,Oct,311.4561201
+tasmania,GWh,2019,Nov,512.0955855
+tasmania,GWh,2019,Dec,387.619535
+tasmania,GWh,2019,Jan,-6.370465764
+tasmania,GWh,2019,Feb,211.3731675
+tasmania,GWh,2019,Mar,247.3674507
+tasmania,GWh,2019,Apr,620.9430752
+tasmania,GWh,2019,May,928.4284156
+tasmania,GWh,2019,Jun,1104.5058
+tasmania,GWh,2020,Jul,2267.164723
+tasmania,GWh,2020,Aug,1302.38857
+tasmania,GWh,2020,Sep,846.8800737
+tasmania,GWh,2020,Oct,390.9043163
+tasmania,GWh,2020,Nov,854.8205821
+tasmania,GWh,2020,Dec,659.3555671
+tasmania,GWh,2020,Jan,184.5908123
+tasmania,GWh,2020,Feb,180.5792011
+tasmania,GWh,2020,Mar,466.6263337
+tasmania,GWh,2020,Apr,1123.938409
+tasmania,GWh,2020,May,988.0348028
+tasmania,GWh,2020,Jun,911.463952
+tasmania,GWh,2021,Jul,759.9182978
+tasmania,GWh,2021,Aug,939.2063517
+tasmania,GWh,2021,Sep,906.7096299
+tasmania,GWh,2021,Oct,1149.754742
+tasmania,GWh,2021,Nov,224.8680231
+tasmania,GWh,2021,Dec,399.2258246
+tasmania,GWh,2021,Jan,168.9648192
+tasmania,GWh,2021,Feb,428.1256704
+tasmania,GWh,2021,Mar,394.3037307
+tasmania,GWh,2021,Apr,703.427406
+tasmania,GWh,2021,May,770.1658363
+tasmania,GWh,2021,Jun,948.9892989
+tasmania,GWh,2022,Jul,1578.300215
+tasmania,GWh,2022,Aug,1777.249127
+tasmania,GWh,2022,Sep,1282.412904
+tasmania,GWh,2022,Oct,1343.988807
+tasmania,GWh,2022,Nov,693.1851303
+tasmania,GWh,2022,Dec,134.9539946
+tasmania,GWh,2022,Jan,161.5508135
+tasmania,GWh,2022,Feb,24.37406092
+tasmania,GWh,2022,Mar,140.395843
+tasmania,GWh,2022,Apr,228.1057273
+tasmania,GWh,2022,May,886.4963299
+tasmania,GWh,2022,Jun,1165.862232
+tasmania,GWh,2023,Jul,724.4409977
+tasmania,GWh,2023,Aug,1694.750206
+tasmania,GWh,2023,Sep,795.8037809
+tasmania,GWh,2023,Oct,1592.159695
+tasmania,GWh,2023,Nov,979.5601916
+tasmania,GWh,2023,Dec,365.4748462
+tasmania,GWh,2023,Jan,37.13068205
+tasmania,GWh,2023,Feb,59.87930957
+tasmania,GWh,2023,Mar,389.4229549
+tasmania,GWh,2023,Apr,505.6712992
+tasmania,GWh,2023,May,830.4931732
+tasmania,GWh,2023,Jun,1437.980263
+tasmania,GWh,2024,Jul,1443.462075
+tasmania,GWh,2024,Aug,1149.233367
+tasmania,GWh,2024,Sep,860.8922902
+tasmania,GWh,2024,Oct,603.7822776
+tasmania,GWh,2024,Nov,222.210529
+tasmania,GWh,2024,Dec,199.6402088
+tasmania,GWh,2024,Jan,275.3790283
+tasmania,GWh,2024,Feb,42.4327225
+tasmania,GWh,2024,Mar,123.9070728
+tasmania,GWh,2024,Apr,313.9278306
+tasmania,GWh,2024,May,379.9674961
+tasmania,GWh,2024,Jun,769.5343555
+tasmania,GWh,2007,Jul,971.4483506
+tasmania,GWh,2007,Aug,820.5641515
+tasmania,GWh,2007,Sep,990.5977998
+tasmania,GWh,2007,Oct,595.6105813
+tasmania,GWh,2007,Nov,231.0447483
+tasmania,GWh,2007,Dec,148.1147609
+tasmania,GWh,2007,Jan,252.8087993
+tasmania,GWh,2007,Feb,22.72680077
+tasmania,GWh,2007,Mar,162.5914471
+tasmania,GWh,2007,Apr,134.5710596
+tasmania,GWh,2007,May,1340.905001
+tasmania,GWh,2007,Jun,537.1342952
+snowy,GL (representative; shape only),2011,Jul,279.0
+snowy,GL (representative; shape only),2011,Aug,213.0
+snowy,GL (representative; shape only),2011,Sep,341.0
+snowy,GL (representative; shape only),2011,Oct,263.0
+snowy,GL (representative; shape only),2011,Nov,386.0
+snowy,GL (representative; shape only),2011,Dec,397.0
+snowy,GL (representative; shape only),2011,Jan,164.0
+snowy,GL (representative; shape only),2011,Feb,235.0
+snowy,GL (representative; shape only),2011,Mar,152.0
+snowy,GL (representative; shape only),2011,Apr,108.0
+snowy,GL (representative; shape only),2011,May,173.0
+snowy,GL (representative; shape only),2011,Jun,191.0
+snowy,GL (representative; shape only),2012,Jul,140.0
+snowy,GL (representative; shape only),2012,Aug,126.0
+snowy,GL (representative; shape only),2012,Sep,121.0
+snowy,GL (representative; shape only),2012,Oct,112.0
+snowy,GL (representative; shape only),2012,Nov,146.0
+snowy,GL (representative; shape only),2012,Dec,107.0
+snowy,GL (representative; shape only),2012,Jan,72.0
+snowy,GL (representative; shape only),2012,Feb,120.0
+snowy,GL (representative; shape only),2012,Mar,197.0
+snowy,GL (representative; shape only),2012,Apr,135.0
+snowy,GL (representative; shape only),2012,May,178.0
+snowy,GL (representative; shape only),2012,Jun,251.0
+snowy,GL (representative; shape only),2013,Jul,402.0
+snowy,GL (representative; shape only),2013,Aug,313.0
+snowy,GL (representative; shape only),2013,Sep,266.0
+snowy,GL (representative; shape only),2013,Oct,233.0
+snowy,GL (representative; shape only),2013,Nov,156.0
+snowy,GL (representative; shape only),2013,Dec,175.0
+snowy,GL (representative; shape only),2013,Jan,111.0
+snowy,GL (representative; shape only),2013,Feb,171.0
+snowy,GL (representative; shape only),2013,Mar,164.0
+snowy,GL (representative; shape only),2013,Apr,172.0
+snowy,GL (representative; shape only),2013,May,242.0
+snowy,GL (representative; shape only),2013,Jun,268.0
+snowy,GL (representative; shape only),2014,Jul,348.0
+snowy,GL (representative; shape only),2014,Aug,227.0
+snowy,GL (representative; shape only),2014,Sep,188.0
+snowy,GL (representative; shape only),2014,Oct,244.0
+snowy,GL (representative; shape only),2014,Nov,191.0
+snowy,GL (representative; shape only),2014,Dec,274.0
+snowy,GL (representative; shape only),2014,Jan,58.0
+snowy,GL (representative; shape only),2014,Feb,34.0
+snowy,GL (representative; shape only),2014,Mar,13.0
+snowy,GL (representative; shape only),2014,Apr,26.0
+snowy,GL (representative; shape only),2014,May,146.0
+snowy,GL (representative; shape only),2014,Jun,191.0
+snowy,GL (representative; shape only),2015,Jul,116.0
+snowy,GL (representative; shape only),2015,Aug,120.0
+snowy,GL (representative; shape only),2015,Sep,169.0
+snowy,GL (representative; shape only),2015,Oct,116.0
+snowy,GL (representative; shape only),2015,Nov,43.0
+snowy,GL (representative; shape only),2015,Dec,67.0
+snowy,GL (representative; shape only),2015,Jan,111.0
+snowy,GL (representative; shape only),2015,Feb,95.0
+snowy,GL (representative; shape only),2015,Mar,166.0
+snowy,GL (representative; shape only),2015,Apr,120.0
+snowy,GL (representative; shape only),2015,May,106.0
+snowy,GL (representative; shape only),2015,Jun,134.0
+snowy,GL (representative; shape only),2016,Jul,175.0
+snowy,GL (representative; shape only),2016,Aug,190.0
+snowy,GL (representative; shape only),2016,Sep,180.0
+snowy,GL (representative; shape only),2016,Oct,165.0
+snowy,GL (representative; shape only),2016,Nov,102.0
+snowy,GL (representative; shape only),2016,Dec,124.0
+snowy,GL (representative; shape only),2016,Jan,249.0
+snowy,GL (representative; shape only),2016,Feb,231.0
+snowy,GL (representative; shape only),2016,Mar,317.0
+snowy,GL (representative; shape only),2016,Apr,199.0
+snowy,GL (representative; shape only),2016,May,196.0
+snowy,GL (representative; shape only),2016,Jun,313.0
+snowy,GL (representative; shape only),2017,Jul,302.0
+snowy,GL (representative; shape only),2017,Aug,216.0
+snowy,GL (representative; shape only),2017,Sep,234.0
+snowy,GL (representative; shape only),2017,Oct,335.0
+snowy,GL (representative; shape only),2017,Nov,329.0
+snowy,GL (representative; shape only),2017,Dec,359.0
+snowy,GL (representative; shape only),2017,Jan,120.0
+snowy,GL (representative; shape only),2017,Feb,132.0
+snowy,GL (representative; shape only),2017,Mar,73.0
+snowy,GL (representative; shape only),2017,Apr,49.0
+snowy,GL (representative; shape only),2017,May,282.0
+snowy,GL (representative; shape only),2017,Jun,296.0
+snowy,GL (representative; shape only),2018,Jul,215.0
+snowy,GL (representative; shape only),2018,Aug,232.0
+snowy,GL (representative; shape only),2018,Sep,142.0
+snowy,GL (representative; shape only),2018,Oct,96.0
+snowy,GL (representative; shape only),2018,Nov,44.0
+snowy,GL (representative; shape only),2018,Dec,62.0
+snowy,GL (representative; shape only),2018,Jan,179.0
+snowy,GL (representative; shape only),2018,Feb,157.0
+snowy,GL (representative; shape only),2018,Mar,201.0
+snowy,GL (representative; shape only),2018,Apr,228.0
+snowy,GL (representative; shape only),2018,May,278.0
+snowy,GL (representative; shape only),2018,Jun,394.0
+snowy,GL (representative; shape only),2019,Jul,295.0
+snowy,GL (representative; shape only),2019,Aug,249.0
+snowy,GL (representative; shape only),2019,Sep,100.0
+snowy,GL (representative; shape only),2019,Oct,78.0
+snowy,GL (representative; shape only),2019,Nov,48.0
+snowy,GL (representative; shape only),2019,Dec,51.0
+snowy,GL (representative; shape only),2019,Jan,105.0
+snowy,GL (representative; shape only),2019,Feb,85.0
+snowy,GL (representative; shape only),2019,Mar,87.0
+snowy,GL (representative; shape only),2019,Apr,114.0
+snowy,GL (representative; shape only),2019,May,188.0
+snowy,GL (representative; shape only),2019,Jun,292.0
+snowy,GL (representative; shape only),2020,Jul,156.0
+snowy,GL (representative; shape only),2020,Aug,137.0
+snowy,GL (representative; shape only),2020,Sep,152.0
+snowy,GL (representative; shape only),2020,Oct,125.0
+snowy,GL (representative; shape only),2020,Nov,104.0
+snowy,GL (representative; shape only),2020,Dec,90.0
+snowy,GL (representative; shape only),2020,Jan,167.0
+snowy,GL (representative; shape only),2020,Feb,178.0
+snowy,GL (representative; shape only),2020,Mar,125.0
+snowy,GL (representative; shape only),2020,Apr,139.0
+snowy,GL (representative; shape only),2020,May,208.0
+snowy,GL (representative; shape only),2020,Jun,249.0
+snowy,GL (representative; shape only),2021,Jul,214.0
+snowy,GL (representative; shape only),2021,Aug,231.0
+snowy,GL (representative; shape only),2021,Sep,138.0
+snowy,GL (representative; shape only),2021,Oct,190.0
+snowy,GL (representative; shape only),2021,Nov,155.0
+snowy,GL (representative; shape only),2021,Dec,172.0
+snowy,GL (representative; shape only),2021,Jan,172.0
+snowy,GL (representative; shape only),2021,Feb,184.0
+snowy,GL (representative; shape only),2021,Mar,253.0
+snowy,GL (representative; shape only),2021,Apr,155.0
+snowy,GL (representative; shape only),2021,May,250.0
+snowy,GL (representative; shape only),2021,Jun,341.0
+snowy,GL (representative; shape only),2022,Jul,234.0
+snowy,GL (representative; shape only),2022,Aug,105.0
+snowy,GL (representative; shape only),2022,Sep,132.0
+snowy,GL (representative; shape only),2022,Oct,135.0
+snowy,GL (representative; shape only),2022,Nov,221.0
+snowy,GL (representative; shape only),2022,Dec,149.0
+snowy,GL (representative; shape only),2022,Jan,175.0
+snowy,GL (representative; shape only),2022,Feb,168.0
+snowy,GL (representative; shape only),2022,Mar,158.0
+snowy,GL (representative; shape only),2022,Apr,140.0
+snowy,GL (representative; shape only),2022,May,345.0
+snowy,GL (representative; shape only),2022,Jun,353.0
+snowy,GL (representative; shape only),2023,Jul,305.0
+snowy,GL (representative; shape only),2023,Aug,240.0
+snowy,GL (representative; shape only),2023,Sep,210.0
+snowy,GL (representative; shape only),2023,Oct,227.0
+snowy,GL (representative; shape only),2023,Nov,263.0
+snowy,GL (representative; shape only),2023,Dec,162.0
+snowy,GL (representative; shape only),2023,Jan,187.0
+snowy,GL (representative; shape only),2023,Feb,132.0
+snowy,GL (representative; shape only),2023,Mar,163.0
+snowy,GL (representative; shape only),2023,Apr,116.0
+snowy,GL (representative; shape only),2023,May,223.0
+snowy,GL (representative; shape only),2023,Jun,198.0
+snowy,GL (representative; shape only),2024,Jul,233.0
+snowy,GL (representative; shape only),2024,Aug,241.0
+snowy,GL (representative; shape only),2024,Sep,124.0
+snowy,GL (representative; shape only),2024,Oct,88.0
+snowy,GL (representative; shape only),2024,Nov,170.0
+snowy,GL (representative; shape only),2024,Dec,128.0
+snowy,GL (representative; shape only),2024,Jan,129.0
+snowy,GL (representative; shape only),2024,Feb,182.0
+snowy,GL (representative; shape only),2024,Mar,181.0
+snowy,GL (representative; shape only),2024,Apr,108.0
+snowy,GL (representative; shape only),2024,May,179.0
+snowy,GL (representative; shape only),2024,Jun,212.0
+snowy,GL (representative; shape only),2007,Jul,235.0
+snowy,GL (representative; shape only),2007,Aug,128.0
+snowy,GL (representative; shape only),2007,Sep,129.0
+snowy,GL (representative; shape only),2007,Oct,91.0
+snowy,GL (representative; shape only),2007,Nov,85.0
+snowy,GL (representative; shape only),2007,Dec,57.0
+snowy,GL (representative; shape only),2007,Jan,263.0
+snowy,GL (representative; shape only),2007,Feb,76.0
+snowy,GL (representative; shape only),2007,Mar,90.0
+snowy,GL (representative; shape only),2007,Apr,90.0
+snowy,GL (representative; shape only),2007,May,76.0
+snowy,GL (representative; shape only),2007,Jun,223.0

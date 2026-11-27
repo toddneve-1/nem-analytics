@@ -61,6 +61,7 @@ class Data:
     interconnectors: pd.DataFrame
     demand: pd.DataFrame
     vre_cf: pd.DataFrame
+    hydro_inflows: pd.DataFrame | None = None
 
 
 def load_data(root: Path, cfg: dict, trace_dir: Path) -> Data:
@@ -70,7 +71,8 @@ def load_data(root: Path, cfg: dict, trace_dir: Path) -> Data:
     year = ModelYear(cfg["financial_year_end"])
     demand = hourly_demand(trace_dir, year, cfg["scenario"])
     cf, _ = regional_vre_capacity_factors(trace_dir, units, year)
-    return Data(units, ics, demand, cf)
+    inflows = pd.read_csv(inputs / "hydro_inflows.csv")
+    return Data(units, ics, demand, cf, inflows)
 
 
 def demand_for(data: Data, poe: str) -> pd.DataFrame:
@@ -88,7 +90,8 @@ def run_one(
     if sample is not None:
         rng = np.random.default_rng([cfg["reliability"]["seed"], sample])
         avail = sample_available_fraction(data.units, len(dem), rng)  # all units: common draws
-    n = build_network(units, data.interconnectors, dem, data.vre_cf, cfg, avail)
+    n = build_network(units, data.interconnectors, dem, data.vre_cf, cfg, avail,
+                      data.hydro_inflows)  # fmt: off
     gas = None
     if case.gas == "tight":
         g = cfg["gas"]
