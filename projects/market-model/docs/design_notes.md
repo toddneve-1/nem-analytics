@@ -117,7 +117,7 @@ GSOO's 700–1,200 TJ/day range for southern GPG demand, so the reference is pla
 itself is an illustrative stress case; v0.2 should derive it from southern supply capacity less
 non-GPG peak-day demand, using the GSOO facility data in the workbook.
 
-## Gas balance (groundwork, waiting on GSOO data)
+## Gas balance (from the 2026 GSOO)
 
 `config/gas_balance.yaml` and `nemmodel.gas` implement the data-based southern winter gas
 balance: production + supply from the north + storage withdrawal - other gas demand = gas

@@ -22,9 +22,9 @@ CASES = [
 ]
 LABELS = {
     "coal-workbook_gas-unconstrained": "Workbook coal, gas unconstrained",
-    "coal-workbook_gas-tight": "Workbook coal, tight winter gas",
+    "coal-workbook_gas-tight": "Workbook coal, winter gas limited (GSOO)",
     "coal-early_gas-unconstrained": "Early coal exit, gas unconstrained",
-    "coal-early_gas-tight": "Early coal exit, tight winter gas",
+    "coal-early_gas-tight": "Early coal exit, winter gas limited (GSOO)",
 }
 COLOURS = dict(zip(CASES, ["#257de0", "#f47230", "#00b894", "#f2a600"], strict=True))
 TEXT, MUTED, GRID = "#191919", "#666666", "#e6e6e6"

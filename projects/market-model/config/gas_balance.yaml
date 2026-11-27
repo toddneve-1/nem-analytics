@@ -2,25 +2,34 @@
 # system). Gas available to power stations on a winter day =
 #     southern production + supply from the north + storage withdrawal - other gas demand.
 #
-# Values marked GSOO must be read from the 2026 GSOO (see docs/data_needed.md). The model
-# refuses to use this balance while any of them is blank, so nothing runs on made-up numbers.
-# Until then the study uses the illustrative cap in assumptions.yaml.
+# All figures from AEMO's 2026 Gas Statement of Opportunities (March 2026), Step Change scenario,
+# existing, committed and anticipated developments. Values marked "chart" are read from a figure
+# and are accurate to about +/-25 TJ/day.
 
-source: null                        # GSOO: e.g. "2026 GSOO, figure 12 and data file, sheet X"
+source: >-
+  AEMO 2026 GSOO (March 2026). Production: Figure 3, p. 8 (June peak production capacity,
+  existing, committed and anticipated; chart). Northern supply and storage: Figure 35, p. 68
+  (cumulative southern supply capacity lines; chart). Peak-day demand excluding gas-powered
+  generation: Table 6, p. 38 (1-in-2 winter, NSW + SA + TAS + VIC; 2026 and 2030 values,
+  interpolated linearly to 2028 and 2029). Average winter-day demand: Table 22, p. 109 (2027
+  monthly residential, commercial and industrial demand, June-August, southern regions:
+  105.9 PJ over 92 days = 1,151 TJ/day, 0.757 of the interpolated 2027 1-in-2 peak of
+  1,520 TJ/day), with the same ratio applied to the 2028 and 2029 peaks.
 
 winters:
   # Calendar winters inside FY2028-29: July-August 2028 and June 2029.
   2028:
-    southern_production_tj_d: null  # GSOO: southern fields' peak-day production capacity
-    northern_supply_tj_d: null      # GSOO: gas from Queensland available to the south
-    other_demand_peak_tj_d: null    # GSOO: peak-day demand excluding power generation (1-in-2)
-    other_demand_average_tj_d: null # GSOO: average winter-day demand excluding power generation
+    southern_production_tj_d: 935      # Fig. 3: ~845 existing and committed + ~90 anticipated (chart)
+    northern_supply_tj_d: 525          # Fig. 35: expected SWQP flows after ECGG Stage 3A (chart)
+    storage_withdrawal_tj_d: 870       # Fig. 35: Iona ~600 + Dandenong, Newcastle, KKLP ~270 (chart)
+    other_demand_peak_tj_d: 1481       # Table 6: 1-in-2, interpolated (2026: 1,560; 2030: 1,402)
+    other_demand_average_tj_d: 1121    # 0.757 x peak (Table 22, see source)
   2029:
-    southern_production_tj_d: null
-    northern_supply_tj_d: null
-    other_demand_peak_tj_d: null
-    other_demand_average_tj_d: null
+    southern_production_tj_d: 630      # Fig. 3: ~545 existing and committed + ~85 anticipated (chart)
+    northern_supply_tj_d: 520          # Fig. 35 (chart)
+    storage_withdrawal_tj_d: 880       # Fig. 35: Iona ~620 (with HUGS) + shallow storage ~260 (chart)
+    other_demand_peak_tj_d: 1442       # Table 6: 1-in-2, interpolated
+    other_demand_average_tj_d: 1092    # 0.757 x peak
 
-# Storage withdrawal is taken from the workbook (online southern storage facilities: Iona,
-# Dandenong LNG, Newcastle, Moomba) unless set here.
-storage_withdrawal_tj_d: null
+# Not represented: storage running down over a winter (Iona holds about 24 PJ, less than a
+# winter at full withdrawal), and 1-in-20 peak demand (Table 6 gives about 6 % higher peaks).

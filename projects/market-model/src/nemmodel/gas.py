@@ -64,7 +64,7 @@ def daily_allowance(
     ``southern_demand_mw`` is hourly electricity demand summed over the southern regions; its
     daily mean ranks how cold each day is.
     """
-    storage = balance.get("storage_withdrawal_tj_d") or storage_withdrawal_tj_d(infrastructure)
+    default_storage = balance.get("storage_withdrawal_tj_d")
     daily = southern_demand_mw.groupby(southern_demand_mw.index.floor("D")).mean()
     daily = daily[daily.index.month.isin(months)]
     out = {}
@@ -76,6 +76,9 @@ def daily_allowance(
         other = w["other_demand_average_tj_d"] + cold * (
             w["other_demand_peak_tj_d"] - w["other_demand_average_tj_d"]
         )
+        # Storage withdrawal: per winter if given, else one figure for all, else the workbook.
+        storage = (w.get("storage_withdrawal_tj_d") or default_storage
+                   or storage_withdrawal_tj_d(infrastructure))  # fmt: off
         supply = w["southern_production_tj_d"] + w["northern_supply_tj_d"] + storage
         out[year] = supply - other
     return pd.concat(out.values()).sort_index()

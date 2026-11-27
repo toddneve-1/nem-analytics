@@ -271,8 +271,12 @@ def test_gas_balance_refuses_missing_gsoo_values(tmp_path):
 
     from .conftest import ROOT
 
+    b = load_balance(ROOT / "config" / "gas_balance.yaml")  # committed balance is complete
+    assert set(b["winters"]) == {2028, 2029}
+    blank = tmp_path / "blank.yaml"
+    blank.write_text("source: null\nwinters:\n  2028:\n    southern_production_tj_d: null\n")
     with pytest.raises(MissingGasDataError, match="source"):
-        load_balance(ROOT / "config" / "gas_balance.yaml")  # committed template is blank
+        load_balance(blank)
 
 
 def test_gas_balance_daily_allowance():

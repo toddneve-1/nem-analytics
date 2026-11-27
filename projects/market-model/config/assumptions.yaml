@@ -63,7 +63,7 @@ gas:
   constraint_months: [6, 7, 8]                # winter
   # How the tight-gas case caps gas for power stations: "illustrative" (below) until the GSOO
   # values in config/gas_balance.yaml are filled in, then "gsoo" (daily southern gas balance).
-  tight_case: illustrative
+  tight_case: gsoo
   # Tight-winter case: the gas available to southern gas-powered generation on any winter day,
   # as a fraction of the most the unconstrained model burns on a winter day. Illustrative for
   # v0.1; to be calibrated against the GSOO peak-day supply-demand balance.
