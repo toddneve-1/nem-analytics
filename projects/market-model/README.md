@@ -10,14 +10,13 @@ Inputs come from AEMO's ISP *Inputs, Assumptions and Scenarios Report* (IASR) wo
 demand, wind and solar traces. They are parsed into versioned tables committed in
 [`inputs/`](inputs/).
 
-**Status: v0.1.** Every element of the assessment is present, each in simplified form; the
-simplifications are listed below. See [docs/design_notes.md](docs/design_notes.md) for the
-reasons behind each choice.
+**Status: v0.2.** Every element of the assessment is present, each in simplified form; the
+simplifications are listed below. v0.2 adds a whole-year water plan for Tasmania and Snowy,
+minimum running levels and ramping for coal and gas, and the groundwork for a gas balance built
+from GSOO data. See [docs/design_notes.md](docs/design_notes.md) for the reasons behind each
+choice, and [docs/data_needed.md](docs/data_needed.md) for the AEMO data still to be added.
 
-## Results (v0.1)
-
-> These results are from v0.1, before the hydro, unit-commitment and gas changes described in
-> the method table. The study is being rerun with them.
+## Results (v0.2)
 
 ![Expected unserved energy by region and scenario](docs/figures/eue_by_region.png)
 
@@ -26,35 +25,43 @@ brackets: outage draws, out of 10, with any unserved energy.
 
 | Region | Workbook coal, gas unconstrained | Workbook coal, tight winter gas | Early coal exit, gas unconstrained | Early coal exit, tight winter gas |
 |---|---|---|---|---|
-| QLD1 | 0 (0) | 0 (0) | 0.0005 (5) | 0.0005 (6) |
-| NSW1 | **0.0033** (1) | **0.059** (3) | **0.62** (10) | **2.79** (10) |
-| VIC1 | 0 (0) | **0.26** (10) | 0 (0) | **0.32** (10) |
-| SA1 | **0.050** (1) | **2.04** (10) | **1.17** (10) | **9.25** (10) |
+| QLD1 | 0 (0) | 0 (0) | 0.0005 (4) | **0.015** (10) |
+| NSW1 | 0 (0) | **0.021** (6) | **0.022** (10) | **2.25** (10) |
+| VIC1 | 0 (0) | **0.050** (10) | 0 (0) | **0.082** (10) |
+| SA1 | 0 (0) | **0.87** (10) | **0.079** (10) | **7.06** (10) |
 | TAS1 | 0 (0) | 0 (0) | 0 (0) | 0 (0) |
 
 Bold: above the reliability standard. Full results: [`results/eue.csv`](results/eue.csv) and,
 for every run, [`results/runs.csv`](results/runs.csv).
 
+**Read these as optimistic.** The Tasmanian and Snowy water plan is made with full knowledge of
+the year's weather and breakdowns, so the dams save water for exactly the weeks that need it.
+Planning on expected conditions instead is the next change (see Assumptions).
+
 ### Findings
 
-1. **Base case: close to the standard, with the excess driven by one outage draw.** QLD, VIC
-   and TAS have no unserved energy. NSW and SA exceed 0.002 %, but only in one of the ten
-   outage draws; with ten draws, that is not distinguishable from meeting the standard. The
-   model omits several things that would raise EUE (other weather years, long-duration outages,
-   unit commitment), so it should not be read as showing a comfortable margin either.
-2. **Tight winter gas creates shortfalls in Victoria and South Australia in every draw.** With
-   southern gas-powered generation capped at 587 TJ/day from June to August, VIC reaches
-   0.26 % and SA 2.0 %. Here the gas limit drives the result, not unlucky outages: long,
-   still winter periods need more gas than the cap allows.
-3. **Early coal exit moves the problem to New South Wales.** Retiring Bayswater and Vales
-   Point B leaves NSW with only Mt Piper's 1.4 GW of coal. NSW EUE rises to 0.62 % in every
-   draw. Gas fills most of the gap: southern gas burn rises from 33 PJ to 175 PJ a year, and
-   the peak winter day from about 1,500 to 1,850 TJ/day.
-4. **The two risks compound.** With both early exit and tight gas, EUE is far above the sum of
-   the separate effects: NSW 2.8 % against 0.06 % + 0.62 %, and SA 9.2 % against 2.0 % +
-   1.2 %. Early coal retirement is workable here only if winter gas is available, and winter
-   gas is exactly what the GSOO flags as at risk. That interaction is what an integrated
-   gas–electricity assessment exists to catch.
+1. **Base case: within the standard.** No region has unserved energy in any outage draw.
+2. **Tight winter gas creates shortfalls in South Australia and Victoria in every draw.** With
+   southern gas-powered generation capped at 195 TJ/day from June to August, SA reaches 0.87 %
+   and VIC 0.05 %, and NSW exceeds the standard in six draws of ten. The gas limit drives the
+   result, not unlucky outages.
+3. **Early coal exit alone pushes NSW and SA above the standard.** Retiring Bayswater and Vales
+   Point B leaves NSW with only Mt Piper's 1.4 GW of coal. Gas fills most of the gap: southern
+   gas burn rises from 9 PJ to 168 PJ a year, and the peak winter day from about 700 to
+   1,650 TJ, above the top of the GSOO's range for southern gas-powered generation.
+4. **The two risks compound.** With both, unserved energy is far above the sum of the separate
+   effects: NSW 2.25 % against 0.021 % + 0.022 %, and SA 7.1 % against 0.87 % + 0.08 %. Early
+   coal retirement is workable here only if winter gas is available, and winter gas is exactly
+   what the GSOO flags as at risk. That interaction is what an integrated gas–electricity
+   assessment exists to catch.
+
+**What changed from v0.1.** Unserved energy is lower in every scenario: the whole-year water
+plan lets Tasmania and Snowy save water for winter, where v0.1 forced every store back to its
+starting level each week. The base case moves from marginally above the standard (one draw of
+ten) to within it. The compounding of coal and gas risk holds in both versions. On/off
+decisions for coal and gas barely change unserved energy: in a shortfall week everything runs
+flat out, so minimum levels do not bind (checked against exact per-unit decisions on a tight
+week).
 
 ![Unserved energy in each outage sample](docs/figures/unserved_by_sample.png)
 
@@ -67,13 +74,13 @@ while the shortfalls here are multi-day energy shortages in winter.
 | Quantity | This model | Published | Source |
 |---|---|---|---|
 | Victorian reliability, FY2028-29, committed and anticipated fleet | Within the standard (0 % EUE) | No shortfall against the standard until 2030-31 (2025 ESOO, as summarised by the Victorian Auditor-General's Office) | [VAGO](https://audit.vic.gov.au/report/managing-transition-renewable-energy?section=) |
-| Peak winter-day gas for southern gas-powered generation | 1,174 TJ/day with no outages; about 1,500 TJ/day averaged over outage draws | 700 to 1,200 TJ/day | [2025 GSOO webinar](https://www.aemo.com.au/-/media/files/gas/national_planning_and_forecasting/gsoo/2025/2025-gsoo-webinar-presentation.pdf) |
-| Timing of southern peak-day gas risk | Tight case modelled in winter 2028 and 2029 | Peak-day shortfall risk from 2028 | [2025 GSOO](https://www.aemo.com.au/-/media/files/gas/national_planning_and_forecasting/gsoo/2025/2025-gas-statement-of-opportunities.pdf) |
+| Peak winter-day gas for southern gas-powered generation (base case) | About 700 TJ/day averaged over outage draws (390 TJ/day with no outages) | 700 to 1,200 TJ/day | [2025 GSOO webinar](https://www.aemo.com.au/-/media/files/gas/national_planning_and_forecasting/gsoo/2025/2025-gsoo-webinar-presentation.pdf) |
+| Timing of southern peak-day gas risk | Tight case modelled in winter 2028 and June 2029 | Peak-day shortfall risk from 2029 (2026 GSOO; 2028 in the 2025 GSOO) | [2026 GSOO](https://www.aemo.com.au/-/media/files/gas/national_planning_and_forecasting/gsoo/2026/2026-gas-statement-of-opportunities.pdf) |
 
-The model's winter gas peak is at or above the top of the GSOO range. That fits a model with no
-unit commitment, which runs gas hard in the few hours it is needed. A region-by-region
-comparison with the ESOO's published EUE figures is the next step; it needs the ESOO data
-workbook, which AEMO's site does not serve to automated downloads.
+With outages, the base case's winter gas peak sits at the bottom of the GSOO range; without
+outages it is well below. Both fit a model whose dams plan with perfect foresight. A
+region-by-region comparison with the ESOO's published unserved energy figures needs the ESOO
+data workbook, which AEMO's site does not serve to automated downloads.
 
 ## Method
 
@@ -109,7 +116,8 @@ reliability.
   variability, the largest driver of EUE, is not sampled.
 * **Perfect foresight:** inside each week for dispatch, and over the whole year for the
   Tasmanian and Snowy water plan. Real operators plan water without knowing the year's weather
-  or breakdowns.
+  or breakdowns. The next step is to plan on expected conditions (average availability, other
+  weather years) and treat the plan as a target the dispatch may depart from at a cost.
 * **Unit commitment is approximate:** a linear "share of units online" per station, with
   assumed minimum up and down times and no start-up costs. On a tight week it matches exact
   per-unit decisions; on/off detail matters more for cost than for unserved energy.
@@ -120,8 +128,9 @@ reliability.
 * **Ten outage samples** per POE level. EUE is a tail statistic, so the sampling error on small
   values is large. Scenario comparisons are more reliable than absolute levels, because every
   scenario uses the same outage draws.
-* **The tight-gas cap is illustrative:** half of the model's own peak winter-day gas burn. It is
-  not yet derived from the GSOO supply-demand balance.
+* **The tight-gas cap is illustrative:** half of the model's own peak winter-day gas burn with
+  no outages (195 TJ/day). The daily southern gas balance that replaces it is built and waits on
+  the 2026 GSOO figures.
 * **Draft inputs.** The workbook is the Draft 2026 ISP version (v7.5); the traces are from the
   2024 ISP.
 
@@ -145,8 +154,8 @@ uv run nemmodel study
 uv run nemmodel figures
 ```
 
-`nemmodel study` runs 80 one-year dispatches across four processes, which takes about half an
-hour. The seed is fixed in [`config/assumptions.yaml`](config/assumptions.yaml), so reruns give
+`nemmodel study` runs 80 one-year dispatches across three processes, which takes about 1.5
+hours (each process needs up to about 3 GB of memory). The seed is fixed in [`config/assumptions.yaml`](config/assumptions.yaml), so reruns give
 the same results. To rebuild the input tables from a workbook:
 
 ```bash

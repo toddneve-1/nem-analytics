@@ -6,7 +6,7 @@ open-source tools. Each project is self-contained, with its own README, tests an
 | Project | What it does | Status |
 |---|---|---|
 | [Price spike forecasting and battery dispatch](projects/price-spike-forecast/) | Probabilistic 5-minute price forecasts for Victoria (LightGBM quantiles and a spike classifier) and a battery that bids on them; walk-forward evaluation with bootstrap intervals | Development results complete; final holdout pending |
-| [NEM market and reliability model](projects/market-model/) | Five-region hourly PyPSA model built from AEMO's ISP inputs: Monte Carlo outages, expected unserved energy against the reliability standard, and a southern winter gas constraint; coal timing x gas scenario study for FY2028-29 | v0.1 |
+| [NEM market and reliability model](projects/market-model/) | Five-region hourly PyPSA model built from AEMO's ISP inputs: Monte Carlo outages, expected unserved energy against the reliability standard, and a southern winter gas constraint; coal timing x gas scenario study for FY2028-29 | v0.2 |
 
 ## Layout
 
