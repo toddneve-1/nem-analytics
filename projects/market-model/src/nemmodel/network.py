@@ -30,8 +30,10 @@ REGIONS = ["QLD1", "NSW1", "VIC1", "SA1", "TAS1"]
 THERMAL = ["coal", "ccgt", "ocgt", "recip", "liquid", "biomass"]
 GAS_GROUPS = ["ccgt", "ocgt", "recip"]
 SEASONAL = "seasonal_hydro"  # storage planned over the whole year (Tasmania, Snowy)
+# linopy announces future changes to how it aligns coordinates ("legacy" vs "v1" semantics); the
+# behaviour PyPSA relies on today is the legacy one, so these notices are silenced.
+warnings.filterwarnings("ignore", message=".*Under v1.*")
 warnings.filterwarnings("ignore", message=".*absent slots.*")
-warnings.filterwarnings("ignore", message=".*NaN in the constraint RHS.*")
 WHEEL_COST = 0.01  # $/MWh on interconnector flow, to stop flows that serve no purpose
 
 
