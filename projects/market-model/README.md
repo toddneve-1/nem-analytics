@@ -16,6 +16,9 @@ reasons behind each choice.
 
 ## Results (v0.1)
 
+> These results are from v0.1, before the hydro, unit-commitment and gas changes described in
+> the method table. The study is being rerun with them.
+
 ![Expected unserved energy by region and scenario](docs/figures/eue_by_region.png)
 
 **Expected unserved energy, FY2028-29** (% of regional annual energy; standard 0.002 %). In
@@ -74,20 +77,21 @@ workbook, which AEMO's site does not serve to automated downloads.
 
 ## Method
 
-| Element | v0.1 representation |
+| Element | Representation (v0.2) |
 |---|---|
 | Regions | QLD1, NSW1, VIC1, SA1, TAS1, one bus each |
 | Interconnectors | Seven inter-regional flow paths with seasonal forward and reverse limits (notional transfer limits plus uplifts from committed network projects); no losses |
 | Demand | Hourly operational demand (sent out, as modelled), Step Change scenario, 10 % and 50 % POE, weather reference year 2018 |
 | Fleet | Existing, committed and anticipated units (ESOO definition), 573 units; closures from the workbook |
-| Thermal | Aggregated by power station; short-run marginal cost = fuel price × heat rate + variable O&M; seasonal ratings |
+| Thermal | Aggregated by power station; short-run marginal cost = fuel price × heat rate + variable O&M; seasonal ratings; ramp rates from the workbook |
+| Minimum running levels | Coal and combined-cycle gas: workbook minimum stable levels (coal 30–51 % of capacity) and assumed minimum up and down times (coal 12 h / 8 h, CCGT 4 h / 4 h), as a linear "share of units online" per station; checked against exact per-unit on/off decisions |
 | Wind and solar | Regional capacity factors, built from each unit's own project trace where its name matches (81–100 % of capacity), otherwise the regional mean |
 | Storage | Batteries by region, pumped hydro by station (Wivenhoe, Shoalhaven, Kidston), workbook power and energy |
-| Hydro | By region, as storage with a constant inflow sized to an annual capacity factor (Tasmania 45 %, mainland 12–15 %) |
-| Dispatch | Linear programme, solved in weekly windows with perfect foresight; storage returns to its starting level each week |
+| Hydro | Tasmania and Snowy as seasonal storage: Tasmanian monthly inflows (GWh) from the workbook for the weather year, Snowy's monthly pattern from the workbook scaled to an assumed 13 % capacity factor; storage 14,400 GWh (Tasmania) and one year's output (Snowy), starting and ending the year half full, never below 20 %. Smaller schemes: flat inflow, weekly storage |
+| Dispatch | Two stages: a whole-year solve plans Tasmanian and Snowy storage; weekly windows then dispatch, with batteries and pumped hydro returning to their starting level each week |
 | Outages | Monte Carlo, unit by unit: two-state Markov chains for full and partial forced outages, from workbook rates and repair times; 10 samples per POE per scenario, with the same draws in every scenario |
 | Reliability | EUE = 0.304 × (10 % POE) + 0.696 × (50 % POE), as % of regional annual energy, against the 0.002 % standard |
-| Gas | Daily cap on gas burnt by NSW, VIC, SA and TAS gas-powered generation in June to August (tight case only) |
+| Gas | Daily cap on gas burnt by NSW, VIC, SA and TAS gas-powered generation in June to August (tight case only). Illustrative for now; a daily southern gas balance from GSOO data is built and waiting on the 2026 GSOO figures ([data needed](docs/data_needed.md)) |
 
 ### Scenarios (2 × 2)
 
@@ -103,11 +107,16 @@ reliability.
 
 * **One weather year.** The ESOO samples many reference years; v0.1 uses 2018 only. Weather
   variability, the largest driver of EUE, is not sampled.
-* **Perfect foresight inside each week** and storage that is free to optimise against it.
-* **No unit commitment:** no minimum loads, ramp rates or start-up times.
+* **Perfect foresight:** inside each week for dispatch, and over the whole year for the
+  Tasmanian and Snowy water plan. Real operators plan water without knowing the year's weather
+  or breakdowns.
+* **Unit commitment is approximate:** a linear "share of units online" per station, with
+  assumed minimum up and down times and no start-up costs. On a tight week it matches exact
+  per-unit decisions; on/off detail matters more for cost than for unserved energy.
 * **No long-duration outages** (a unit out for months) and no intra-regional network limits.
-* **Hydro energy is spread evenly** across the year rather than following seasonal inflows and
-  storage targets.
+* **Hydro storage assumptions:** Snowy's annual energy, its storage size, and the 50 %
+  starting level and 20 % drought floor for both schemes are assumptions (the workbook gives
+  Tasmanian inflows but not storage sizes or operating rules).
 * **Ten outage samples** per POE level. EUE is a tail statistic, so the sampling error on small
   values is large. Scenario comparisons are more reliable than absolute levels, because every
   scenario uses the same outage draws.
