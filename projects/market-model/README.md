@@ -88,17 +88,17 @@ data workbook, which AEMO's site does not serve to automated downloads.
 |---|---|
 | Regions | QLD1, NSW1, VIC1, SA1, TAS1, one bus each |
 | Interconnectors | Seven inter-regional flow paths with seasonal forward and reverse limits (notional transfer limits plus uplifts from committed network projects); no losses |
-| Demand | Hourly operational demand (sent out, as modelled), Step Change scenario, 10 % and 50 % POE, weather reference year 2018 |
-| Fleet | Existing, committed and anticipated units (ESOO definition), 573 units; closures from the workbook |
+| Demand | Hourly operational demand (sent out, as modelled), Step Change scenario, 10 % and 50 % POE, for each of 13 weather reference years (2011–2023) |
+| Fleet | Existing, committed and anticipated units (ESOO definition), 610 units from the final 2026 ISP workbook; closures from the workbook, with Eraring closing on 30 April 2029 (2026 GSOO) |
 | Thermal | Aggregated by power station; short-run marginal cost = fuel price × heat rate + variable O&M; seasonal ratings; ramp rates from the workbook |
 | Minimum running levels | Coal and combined-cycle gas: workbook minimum stable levels (coal 30–51 % of capacity) and assumed minimum up and down times (coal 12 h / 8 h, CCGT 4 h / 4 h), as a linear "share of units online" per station; checked against exact per-unit on/off decisions |
 | Wind and solar | Regional capacity factors, built from each unit's own project trace where its name matches (81–100 % of capacity), otherwise the regional mean |
 | Storage | Batteries by region, pumped hydro by station (Wivenhoe, Shoalhaven, Kidston), workbook power and energy |
 | Hydro | Tasmania and Snowy as seasonal storage: Tasmanian monthly inflows (GWh) from the workbook for the weather year, Snowy's monthly pattern from the workbook scaled to an assumed 13 % capacity factor; storage 14,400 GWh (Tasmania) and one year's output (Snowy), starting and ending the year half full, never below 20 %. Smaller schemes: flat inflow, weekly storage |
 | Dispatch | Two stages: a whole-year solve plans Tasmanian and Snowy storage; weekly windows then dispatch, with batteries and pumped hydro returning to their starting level each week |
-| Outages | Monte Carlo, unit by unit: two-state Markov chains for full and partial forced outages, from workbook rates and repair times; 10 samples per POE per scenario, with the same draws in every scenario |
+| Outages | Monte Carlo, unit by unit: two-state Markov chains for full and partial forced outages, from workbook rates and repair times; 2 draws per weather year and POE level (26 per POE level per scenario), with the same draws in every scenario |
 | Reliability | EUE = 0.304 × (10 % POE) + 0.696 × (50 % POE), as % of regional annual energy, against the 0.002 % standard |
-| Gas | Daily cap on gas burnt by NSW, VIC, SA and TAS gas-powered generation in June to August (tight case only). Illustrative for now; a daily southern gas balance from GSOO data is built and waiting on the 2026 GSOO figures ([data needed](docs/data_needed.md)) |
+| Gas | Daily cap on gas burnt by NSW, VIC, SA and TAS gas-powered generation in June to August (limited-gas cases), from the 2026 GSOO southern balance: production + northern supply + storage withdrawal − demand excluding power generation, with colder days leaving less for power stations ([sources](config/gas_balance.yaml)) |
 
 ### Scenarios (2 × 2)
 
@@ -112,8 +112,9 @@ data workbook, which AEMO's site does not serve to automated downloads.
 These matter for interpreting the numbers. Most of them make the model **optimistic** about
 reliability.
 
-* **One weather year.** The ESOO samples many reference years; v0.1 uses 2018 only. Weather
-  variability, the largest driver of EUE, is not sampled.
+* **Thirteen weather years, two outage draws each.** The ESOO uses more outage draws; with
+  26 runs per POE level, small EUE values carry wide sampling error. Weather years are the
+  2024 ISP traces (2011–2023).
 * **Perfect foresight:** inside each week for dispatch, and over the whole year for the
   Tasmanian and Snowy water plan. Real operators plan water without knowing the year's weather
   or breakdowns. The next step is to plan on expected conditions (average availability, other
@@ -128,11 +129,12 @@ reliability.
 * **Ten outage samples** per POE level. EUE is a tail statistic, so the sampling error on small
   values is large. Scenario comparisons are more reliable than absolute levels, because every
   scenario uses the same outage draws.
-* **The tight-gas cap is illustrative:** half of the model's own peak winter-day gas burn with
-  no outages (195 TJ/day). The daily southern gas balance that replaces it is built and waits on
-  the 2026 GSOO figures.
-* **Draft inputs.** The workbook is the Draft 2026 ISP version (v7.5); the traces are from the
-  2024 ISP.
+* **Gas balance from charts and interpolation:** several GSOO figures are read from charts
+  (about ±25 TJ/day) and 2028–29 demand is interpolated between the GSOO's 2026 and 2030
+  values. Storage running down over a winter, and 1-in-20 peak gas demand, are not modelled.
+* **Inputs:** the final 2026 ISP workbook (v7.8, June 2026); the traces are from the 2024 ISP.
+  Gladstone also closes in 2029 but no date is published in the sources used, so it runs all
+  year.
 
 ## Reproduce
 

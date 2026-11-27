@@ -12,12 +12,21 @@ lists the simplifications. Later versions deepen the parts that matter most for 
 
 ## Inputs
 
-* **Workbook:** Draft 2026 ISP IASR workbook (v7.5), from the openISP mirror, because AEMO's site
-  refuses automated downloads. The final 2026 ISP workbook (v7.8) should replace it when a copy
-  can be downloaded by hand; `nemmodel build-inputs` regenerates the tables and the manifest
-  records the file hash.
-* **Traces:** 2024 ISP traces for reference year 2018 (the openISP "example" set). Only one
-  weather year, so weather variability is not sampled; this understates EUE.
+* **Workbook:** the final 2026 ISP workbook (v7.8, 25 June 2026), downloaded by hand (AEMO's
+  site refuses automated downloads) and parsed into `inputs/final-2026-isp-v7.8/`. The draft
+  (v7.5, via the openISP mirror) is kept in `inputs/draft-2026-isp-v7.5/` for comparison. Final
+  vs draft: Eraring back in the fleet (closure 2029), +5.9 GW of batteries, +1.1 GW of solar,
+  lower gas running costs; interconnector limits and hydro inflows unchanged.
+* **Closures inside the year:** the workbook gives closure years only, and a unit closing in
+  calendar 2029 counts as in service. `closure_dates` switches a station off from a given day:
+  Eraring from 30 April 2029 (2026 GSOO). Gladstone also closes in 2029 with no published date,
+  so it runs all year.
+* **Weather years:** the 2024 ISP traces for 13 reference years (2011-2023), from the openISP
+  mirror. Raw files (about 1.7 GB a year) are reduced to hourly regional demand and wind and
+  solar capacity factors for FY2028-29 (about 2 MB a year, committed under `inputs/weather/`)
+  and deleted. AEMO scales every weather year to the same annual demand forecast, so only the
+  shape changes between years. Hydro inflows follow each weather year (the workbook has
+  Tasmanian and Snowy inflows for 2011-2024).
 * **Fleet:** the ESOO definition (existing, committed and anticipated). Committed units count if
   commissioned before 1 July 2028; a unit is in service if its closure year is 2029 or later.
 * **Pumped storage labelled "Hydro":** Wivenhoe and Shoalhaven carry storage energy in the
