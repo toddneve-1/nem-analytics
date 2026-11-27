@@ -162,13 +162,14 @@ def build_network(
                 # Start the year free to stay on or switch off (not locked on).
                 "up_time_before": int(uc["min_up_hours"][group]),
             }
+        # Ramp-up limits only. A breakdown takes a unit offline at once, but a ramp-down limit
+        # would stop the model doing so when the outage starts in the first hour of a window
+        # (within a window the model sees it coming and ramps down early; across a window
+        # boundary it cannot), making the window infeasible.
         if g["ramp_up_mw_min"].notna().all():
             up = float(g["ramp_up_mw_min"].sum()) * 60 / p_nom
-            down = float(g["ramp_down_mw_min"].fillna(g["ramp_up_mw_min"]).sum()) * 60 / p_nom
             if up < 1:
                 attrs["ramp_limit_up"] = up
-            if down < 1:
-                attrs["ramp_limit_down"] = down
         n.add(
             "Generator",
             f"{region} {key} {group}",

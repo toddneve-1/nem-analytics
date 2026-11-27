@@ -64,7 +64,7 @@ lists the simplifications. Later versions deepen the parts that matter most for 
   water held back against drought.
 * **Minimum running levels, ramping and start-up delays (added after v0.1).** Coal and
   combined-cycle gas stations have, from the workbook, minimum stable levels (coal: the "typical
-  lowest band", 30-51 % of capacity) and ramp rates (coal: 44-107 % of capacity per hour), plus
+  lowest band", 30-51 % of capacity) and ramp-up rates (coal: 44-107 % of capacity per hour), plus
   assumed minimum up and down times (coal 12 h and 8 h, CCGT 4 h and 4 h; the workbook has
   none). The minimum down time stands in for start-up delay. Open-cycle gas and reciprocating
   engines start in minutes and stay fully flexible. Each station has an "online share" between
@@ -76,6 +76,11 @@ lists the simplifications. Later versions deepen the parts that matter most for 
   out their minimum down time. A test (`test_minimum_stable_level_and_down_time`) shows the
   difference on a small case. An exact version, with one on/off decision per unit, is available
   for validation (`unit_commitment.mode: exact_units`).
+
+  *Ramp-down limits are not applied.* A breakdown takes a unit offline at once. With a
+  ramp-down limit, an outage starting in the first hour of a weekly window made the window
+  infeasible (the unit could not fall from its previous output to zero fast enough); within a
+  window the model sees outages coming and ramps down early, but not across a boundary.
 
   *Breakdowns override the minimum.* A station's minimum is capped each hour at what it can
   produce (after outages and seasonal ratings). Without this, a unit required to stay on for its
