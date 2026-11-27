@@ -179,7 +179,10 @@ def tight_gas_cap(root: Path, cfg: dict, data: Data, out_dir: Path) -> float | p
                   "other_users_shortfall_tj": float(-raw[raw < 0].sum())}  # fmt: off
         cap = raw.clip(lower=0)
     elif g["tight_case"] == "illustrative":
-        ref = run_one(data, cfg, Case("workbook", "unconstrained"), "POE10", None, None)
+        # In a separate process, so the main process does not keep a solver's memory.
+        with ProcessPoolExecutor(max_workers=1, mp_context=mp.get_context("spawn")) as ex:
+            args = (data, cfg, Case("workbook", "unconstrained"), "POE10", None, None)
+            ref = ex.submit(_task, args).result()
         cap = g["tight_fraction"] * ref["gas_max_winter_tj"]
         record = {"method": "illustrative",
                   "reference_max_winter_day_tj": ref["gas_max_winter_tj"],
@@ -191,7 +194,7 @@ def tight_gas_cap(root: Path, cfg: dict, data: Data, out_dir: Path) -> float | p
 
 
 def run_study(
-    root: Path, trace_dir: Path, out_dir: Path, samples: int | None = None, workers: int = 4
+    root: Path, trace_dir: Path, out_dir: Path, samples: int | None = None, workers: int = 3
 ) -> pd.DataFrame:
     cfg = load_config(root / "config" / "assumptions.yaml")
     data = load_data(root, cfg, trace_dir)
@@ -208,7 +211,11 @@ def run_study(
         for s in range(samples)
     ]
     # "spawn", not fork: the parent has already run HiGHS, and forked children can deadlock.
-    with ProcessPoolExecutor(max_workers=workers, mp_context=mp.get_context("spawn")) as ex:
+    # Each worker peaks at about 3.3 GB during the whole-year hydro plan, so three workers fit
+    # in 15 GB; workers are replaced after a few runs so memory does not creep up.
+    with ProcessPoolExecutor(
+        max_workers=workers, mp_context=mp.get_context("spawn"), max_tasks_per_child=4
+    ) as ex:
         results = []
         for i, r in enumerate(ex.map(_task, tasks), 1):
             results.append(r)

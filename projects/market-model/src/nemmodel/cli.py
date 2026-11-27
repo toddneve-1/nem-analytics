@@ -37,7 +37,7 @@ def build_inputs(
 
 
 @app.command()
-def study(samples: int = 0, workers: int = 4, out: Path = ROOT / "results") -> None:
+def study(samples: int = 0, workers: int = 3, out: Path = ROOT / "results") -> None:
     """Run the 2 x 2 study (coal timing x winter gas) with Monte Carlo outages."""
     from nemmodel.study import run_study
 
