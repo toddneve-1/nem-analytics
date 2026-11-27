@@ -316,19 +316,35 @@ def _gas_tj(n: pypsa.Network, gens: pd.Index) -> pd.Series:
     return 3.6 / n.generators.loc[gens, "efficiency"] / 1000.0
 
 
+SIMPLEX_TIME_LIMIT = 120  # seconds; then the window is re-solved with interior point
+
+
 def _optimise(n: pypsa.Network, sns: pd.Index, extra, linearised: bool = True) -> None:
-    status, cond = n.optimize(
-        snapshots=sns,
-        linearized_unit_commitment=linearised,
-        io_api=IO_API,
-        solver_name="highs",
-        solver_options={"output_flag": False, "threads": 1},
-        extra_functionality=extra,
-        include_objective_constant=False,
-        progress=False,
-    )
-    if status != "ok":
-        raise RuntimeError(f"window starting {sns[0]}: {status} ({cond})")
+    """Solve one window with HiGHS. The default simplex method occasionally stalls on a
+    window (seen with some outage draws); after ``SIMPLEX_TIME_LIMIT`` seconds the window is
+    re-solved with the interior-point method, and the window is recorded in
+    ``n.solver_fallbacks``."""
+    base = {"output_flag": False, "threads": 1}
+    for options in ({**base, "time_limit": SIMPLEX_TIME_LIMIT},
+                    {**base, "solver": "ipm", "run_crossover": "on"}):  # fmt: off
+        status, cond = n.optimize(
+            snapshots=sns,
+            linearized_unit_commitment=linearised,
+            io_api=IO_API,
+            solver_name="highs",
+            solver_options=options,
+            extra_functionality=extra,
+            include_objective_constant=False,
+            progress=False,
+        )
+        if status == "ok":
+            return
+        if "time" not in str(cond).lower():
+            break
+        if not hasattr(n, "solver_fallbacks"):
+            n.solver_fallbacks = []
+        n.solver_fallbacks.append(str(sns[0]))
+    raise RuntimeError(f"window starting {sns[0]}: {status} ({cond})")
 
 
 def _planning_copy(n: pypsa.Network, step: int) -> pypsa.Network:
