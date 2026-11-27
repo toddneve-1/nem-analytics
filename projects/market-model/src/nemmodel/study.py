@@ -23,10 +23,9 @@ import numpy as np
 import pandas as pd
 import yaml
 
-from nemmodel.inputs import ModelYear
 from nemmodel.network import REGIONS, GasConstraint, build_network, daily_southern_gas_tj, solve
 from nemmodel.outages import sample_available_fraction
-from nemmodel.traces import hourly_demand, regional_vre_capacity_factors
+from nemmodel.weather import load_year
 
 COAL_CASES = ["workbook", "early"]
 GAS_CASES = ["unconstrained", "tight"]
@@ -59,25 +58,28 @@ def fleet(units: pd.DataFrame, coal: str, cfg: dict) -> pd.DataFrame:
 class Data:
     units: pd.DataFrame
     interconnectors: pd.DataFrame
-    demand: pd.DataFrame
-    vre_cf: pd.DataFrame
+    weather: dict[int, tuple[pd.DataFrame, pd.DataFrame]]  # reference year -> (demand, vre_cf)
     hydro_inflows: pd.DataFrame | None = None
 
+    @property
+    def reference_years(self) -> list[int]:
+        return sorted(self.weather)
 
-def load_data(root: Path, cfg: dict, trace_dir: Path) -> Data:
+
+def load_data(root: Path, cfg: dict) -> Data:
+    """Inputs and the weather years listed in ``cfg['weather']`` (from ``inputs/weather``)."""
     inputs = root / cfg["inputs"]
     units = pd.read_csv(inputs / "units.csv")
     ics = pd.read_csv(inputs / "interconnectors.csv")
-    year = ModelYear(cfg["financial_year_end"])
-    demand = hourly_demand(trace_dir, year, cfg["scenario"])
-    cf, _ = regional_vre_capacity_factors(trace_dir, units, year)
+    out_root = root / cfg["weather"]["dir"]
+    weather = {y: load_year(out_root, y) for y in cfg["weather"]["reference_years"]}
     inflows = pd.read_csv(inputs / "hydro_inflows.csv")
-    return Data(units, ics, demand, cf, inflows)
+    return Data(units, ics, weather, inflows)
 
 
-def demand_for(data: Data, poe: str) -> pd.DataFrame:
+def demand_for(data: Data, poe: str, reference_year: int) -> pd.DataFrame:
     cols = [f"{r}_{poe}" for r in REGIONS]
-    return data.demand[cols].set_axis(REGIONS, axis=1)
+    return data.weather[reference_year][0][cols].set_axis(REGIONS, axis=1)
 
 
 def run_one(
@@ -85,22 +87,28 @@ def run_one(
     cfg: dict,
     case: Case,
     poe: str,
+    reference_year: int,
     sample: int | None,
-    gas_cap: float | pd.Series | None,
+    gas_cap: float | pd.Series | dict | None,
 ) -> dict:
-    """Dispatch one year. ``sample`` None means no forced outages."""
+    """Dispatch one year with one weather year. ``sample`` None means no forced outages.
+
+    Outage draws use common random numbers: draw ``sample`` of weather year ``reference_year``
+    is the same in every scenario."""
     units = fleet(data.units, case.coal, cfg)
-    dem = demand_for(data, poe)
+    dem = demand_for(data, poe, reference_year)
+    vre_cf = data.weather[reference_year][1]
     avail = None
     if sample is not None:
-        rng = np.random.default_rng([cfg["reliability"]["seed"], sample])
+        rng = np.random.default_rng([cfg["reliability"]["seed"], reference_year, sample])
         avail = sample_available_fraction(data.units, len(dem), rng)  # all units: common draws
-    n = build_network(units, data.interconnectors, dem, data.vre_cf, cfg, avail,
-                      data.hydro_inflows)  # fmt: off
+    n = build_network(units, data.interconnectors, dem, vre_cf, cfg, avail,
+                      data.hydro_inflows, reference_year)  # fmt: off
     gas = None
     if case.gas == "tight":
         g = cfg["gas"]
-        gas = GasConstraint(g["southern_regions"], g["constraint_months"], gas_cap)
+        cap = gas_cap[reference_year] if isinstance(gas_cap, dict) else gas_cap
+        gas = GasConstraint(g["southern_regions"], g["constraint_months"], cap)
     solve(n, cfg, gas)
 
     gen = n.generators_t.p.T.groupby(n.generators["carrier"]).sum().T.sum()
@@ -113,6 +121,7 @@ def run_one(
         "coal": case.coal,
         "gas": case.gas,
         "poe": poe,
+        "reference_year": reference_year,
         "sample": sample,
         **{f"unserved_mwh_{r}": float(unserved[r].sum()) for r in REGIONS},
         **{f"unserved_hours_{r}": int((unserved[r] > 1e-3).sum()) for r in REGIONS},
@@ -125,14 +134,17 @@ def run_one(
 
 def _task(args: tuple) -> dict:
     logging.disable(logging.WARNING)
-    data, cfg, case, poe, sample, cap = args
-    return run_one(data, cfg, case, poe, sample, cap)
+    data, cfg, case, poe, reference_year, sample, cap = args
+    return run_one(data, cfg, case, poe, reference_year, sample, cap)
 
 
 def eue_table(runs: pd.DataFrame, data: Data, cfg: dict) -> pd.DataFrame:
-    """EUE (MWh and % of 50 % POE annual energy) by case and region."""
+    """EUE (MWh and % of 50 % POE annual energy) by case and region.
+
+    Within each POE level, every (weather year, outage draw) run counts equally; the POE levels
+    are then weighted. A "draw" here is one weather year with one outage history."""
     w = cfg["reliability"]["poe_weights"]
-    energy = demand_for(data, "POE50").sum()
+    energy = demand_for(data, "POE50", data.reference_years[0]).sum()  # same in every year
     rows = []
     for case, g in runs.groupby("case"):
         for r in REGIONS:
@@ -145,9 +157,11 @@ def eue_table(runs: pd.DataFrame, data: Data, cfg: dict) -> pd.DataFrame:
                     "eue_mwh": eue,
                     "eue_pct": 100 * eue / energy[r],
                     "draws_with_unserved": int(
-                        (g.groupby("sample")[f"unserved_mwh_{r}"].max() > 1).sum()
+                        (
+                            g.groupby(["reference_year", "sample"])[f"unserved_mwh_{r}"].max() > 1
+                        ).sum()
                     ),
-                    "draws": g["sample"].nunique(),
+                    "draws": len(g.groupby(["reference_year", "sample"])),
                 }
             )
     t = pd.DataFrame(rows)
@@ -171,17 +185,22 @@ def tight_gas_cap(root: Path, cfg: dict, data: Data, out_dir: Path) -> float | p
 
         balance = load_balance(root / "config" / "gas_balance.yaml")
         infra = pd.read_csv(root / cfg["inputs"] / "gas_infrastructure.csv")
-        south = demand_for(data, "POE50")[g["southern_regions"]].sum(axis=1)
-        raw = daily_allowance(balance, infra, south, g["constraint_months"])
-        record = {"method": "gsoo", "source": balance["source"],
-                  "allowance_tj_per_day": raw.round(1).astype(str).to_dict(),
-                  "days_other_demand_exceeds_supply": int((raw < 0).sum()),
-                  "other_users_shortfall_tj": float(-raw[raw < 0].sum())}  # fmt: off
-        cap = raw.clip(lower=0)
+        cap, record = {}, {"method": "gsoo", "source": balance["source"], "by_weather_year": {}}
+        for ref in data.reference_years:  # which days are cold depends on the weather year
+            south = demand_for(data, "POE50", ref)[g["southern_regions"]].sum(axis=1)
+            raw = daily_allowance(balance, infra, south, g["constraint_months"])
+            record["by_weather_year"][ref] = {
+                "allowance_tj_per_day_min": float(raw.min()),
+                "allowance_tj_per_day_mean": float(raw.mean()),
+                "days_other_demand_exceeds_supply": int((raw < 0).sum()),
+                "other_users_shortfall_tj": float(-raw[raw < 0].sum()),
+            }
+            cap[ref] = raw.clip(lower=0)
     elif g["tight_case"] == "illustrative":
         # In a separate process, so the main process does not keep a solver's memory.
         with ProcessPoolExecutor(max_workers=1, mp_context=mp.get_context("spawn")) as ex:
-            args = (data, cfg, Case("workbook", "unconstrained"), "POE10", None, None)
+            ref_year = data.reference_years[0]
+            args = (data, cfg, Case("workbook", "unconstrained"), "POE10", ref_year, None, None)
             ref = ex.submit(_task, args).result()
         cap = g["tight_fraction"] * ref["gas_max_winter_tj"]
         record = {"method": "illustrative",
@@ -194,20 +213,23 @@ def tight_gas_cap(root: Path, cfg: dict, data: Data, out_dir: Path) -> float | p
 
 
 def run_study(
-    root: Path, trace_dir: Path, out_dir: Path, samples: int | None = None, workers: int = 3
+    root: Path, out_dir: Path, samples: int | None = None, workers: int = 3
 ) -> pd.DataFrame:
+    """The 2 x 2 study over every weather year, with ``samples`` outage draws per weather year
+    and POE level."""
     cfg = load_config(root / "config" / "assumptions.yaml")
-    data = load_data(root, cfg, trace_dir)
+    data = load_data(root, cfg)
     samples = samples or cfg["reliability"]["samples"]
     out_dir.mkdir(parents=True, exist_ok=True)
 
     cap = tight_gas_cap(root, cfg, data, out_dir)
 
     tasks = [
-        (data, cfg, Case(c, g), poe, s, cap)
+        (data, cfg, Case(c, g), poe, ref, s, cap)
         for c in COAL_CASES
         for g in GAS_CASES
         for poe in cfg["reliability"]["poe_weights"]
+        for ref in data.reference_years
         for s in range(samples)
     ]
     # "spawn", not fork: the parent has already run HiGHS, and forked children can deadlock.
@@ -219,7 +241,8 @@ def run_study(
         results = []
         for i, r in enumerate(ex.map(_task, tasks), 1):
             results.append(r)
-            print(f"[{i}/{len(tasks)}] {r['case']} {r['poe']} sample {r['sample']}", flush=True)
+            print(f"[{i}/{len(tasks)}] {r['case']} {r['poe']} weather {r['reference_year']} "
+                  f"sample {r['sample']}", flush=True)  # fmt: off
     runs = pd.DataFrame(results)
     runs.drop(columns="mean_price").to_csv(out_dir / "runs.csv", index=False)
     eue = eue_table(runs, data, cfg)

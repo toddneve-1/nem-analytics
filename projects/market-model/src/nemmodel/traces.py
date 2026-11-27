@@ -58,9 +58,13 @@ def _to_hourly(df: pd.DataFrame, value: str, by: list[str]) -> pd.DataFrame:
     return df.assign(hour=hour).groupby([*by, "hour"])[value].mean().unstack(by)
 
 
-def hourly_demand(trace_dir: Path, year: ModelYear, scenario: str = "Step Change") -> pd.DataFrame:
+def hourly_demand(
+    trace_dir: Path, year: ModelYear, scenario: str = "Step Change", reference_year: int = 2018
+) -> pd.DataFrame:
     """Hourly operational demand (MW) by region and POE: columns like ``NSW1_POE50``."""
-    files = glob.glob(f"{trace_dir}/demand/scenario={scenario}/**/*.parquet", recursive=True)
+    files = glob.glob(
+        f"{trace_dir}/demand/scenario={scenario}/reference_year={reference_year}/*.parquet"
+    )
     if not files:
         raise FileNotFoundError(f"no demand traces for {scenario} under {trace_dir}")
     filt = [*_period_filter(year), ("demand_type", "=", "OPSO_MODELLING")]
@@ -88,11 +92,11 @@ def _norm(name: str) -> str:
 
 
 def regional_vre_capacity_factors(
-    trace_dir: Path, units: pd.DataFrame, year: ModelYear
+    trace_dir: Path, units: pd.DataFrame, year: ModelYear, reference_year: int = 2018
 ) -> tuple[pd.DataFrame, pd.DataFrame]:
     """Capacity-weighted hourly capacity factor per region and group (``VIC1_wind`` ...), and a
     table recording how each wind/solar unit was matched to a trace."""
-    files = glob.glob(f"{trace_dir}/project/**/*.parquet", recursive=True)
+    files = glob.glob(f"{trace_dir}/project/reference_year={reference_year}/*.parquet")
     t = pa.concat_tables(
         [
             pq.read_table(
@@ -114,7 +118,7 @@ def regional_vre_capacity_factors(
     for (region, group), g in vre.groupby(["region", "group"]):
         matched = g[g["trace"].notna()]
         if matched.empty:
-            out[f"{region}_{group}"] = _zone_cf(trace_dir, year, region, group)
+            out[f"{region}_{group}"] = _zone_cf(trace_dir, year, region, group, reference_year)
             source, matched_mw = f"zone mean ({ZONE_TYPE[group]})", 0.0
         else:
             w = matched.groupby("trace")["capacity_mw"].sum()
@@ -135,8 +139,10 @@ def regional_vre_capacity_factors(
     return pd.DataFrame(out).sort_index(axis=1), pd.DataFrame(records)
 
 
-def _zone_cf(trace_dir: Path, year: ModelYear, region: str, group: str) -> pd.Series:
-    files = glob.glob(f"{trace_dir}/zone/**/*.parquet", recursive=True)
+def _zone_cf(
+    trace_dir: Path, year: ModelYear, region: str, group: str, reference_year: int = 2018
+) -> pd.Series:
+    files = glob.glob(f"{trace_dir}/zone/reference_year={reference_year}/*.parquet")
     t = pa.concat_tables(
         [
             pq.read_table(

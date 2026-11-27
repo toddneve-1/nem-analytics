@@ -4,13 +4,15 @@
 financial_year_end: 2029          # FY2028-29 (1 July 2028 to 30 June 2029), AEST
 scenario: Step Change             # IASR scenario for demand, fuel prices and traces
 inputs: inputs/final-2026-isp-v7.8
-trace_reference_year: 2018        # one weather year (2024 ISP traces)
+weather:                          # 2024 ISP traces, one file set per weather reference year
+  dir: inputs/weather
+  reference_years: [2011, 2012, 2013, 2014, 2015, 2016, 2017, 2018, 2019, 2020, 2021, 2022, 2023]
 
 reliability:
   standard_pct: 0.002             # reliability standard: EUE <= 0.002 % of regional energy
   interim_measure_pct: 0.0006     # Interim Reliability Measure (applies to FY2027-28 and earlier)
   poe_weights: {POE10: 0.304, POE50: 0.696}   # ESOO weighting of 10 % and 50 % POE demand
-  samples: 10                     # outage samples per POE per scenario
+  samples: 2                      # outage draws per weather year, POE level and scenario
   seed: 20290630
 
 dispatch:

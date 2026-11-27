@@ -99,11 +99,13 @@ def build_network(
     cfg: dict,
     available: pd.DataFrame | None = None,
     hydro_inflows: pd.DataFrame | None = None,
+    reference_year: int | None = None,
 ) -> pypsa.Network:
     """Network over ``demand.index`` (hourly). ``demand`` has one column per region (MW).
     ``available`` is the sampled available fraction per unit (hours x unit_id); None means no
     forced outages. ``hydro_inflows`` is the workbook's monthly inflow table; it is required if
-    the fleet has Tasmanian or Snowy hydro."""
+    the fleet has Tasmanian or Snowy hydro; ``reference_year`` picks the weather year's inflows
+    (default: ``cfg['weather']['reference_years'][0]``)."""
     idx = demand.index
     d = cfg["dispatch"]
     n = pypsa.Network()
@@ -251,6 +253,7 @@ def build_network(
         )
     # Conventional hydro: Tasmania and Snowy are seasonal storage; the rest weekly.
     h = cfg["hydro"]
+    ref_year = reference_year or cfg["weather"]["reference_years"][0]
     levels: dict[str, dict] = {}
     hydro = units[units["group"] == "hydro"]
     is_tas = hydro["region"] == h["tasmania"]["region"]
@@ -260,14 +263,14 @@ def build_network(
 
     if is_tas.any():
         g = hydro[is_tas]
-        energy = monthly_inflow_mw(hydro_inflows, "tasmania", cfg["trace_reference_year"], idx)
+        energy = monthly_inflow_mw(hydro_inflows, "tasmania", ref_year, idx)
         p_nom = float(mw[g["unit_id"]].sum(axis=1).max())
         levels[f"{h['tasmania']['region']} tasmania hydro"] = h["tasmania"]
         add_storage(f"{h['tasmania']['region']} tasmania hydro", h["tasmania"]["region"], g,
                     SEASONAL, 1.0, h["tasmania"]["storage_gwh"] * 1000 / p_nom,
                     inflow=energy, pump=False)  # fmt: off
     if is_snowy.any():
-        shape = monthly_inflow_mw(hydro_inflows, "snowy", cfg["trace_reference_year"], idx)
+        shape = monthly_inflow_mw(hydro_inflows, "snowy", ref_year, idx)
         shape = shape / shape.mean()  # representative only: keep the monthly pattern
         for region, g in hydro[is_snowy].groupby("region"):
             mean_mw = h["snowy"]["capacity_factor"] * float(g["capacity_mw"].sum())

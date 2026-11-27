@@ -1,0 +1,16 @@
+{
+  "reference_year": 2016,
+  "financial_year": "2028-29",
+  "scenario": "Step Change",
+  "trace_source": "2024 ISP traces (AEMO), via the openISP mirror",
+  "files": {
+    "https://data.openisp.au/processed/traces/isp_2024/project/reference_year=2016/data_0.parquet": "e5b647df309f3ead1a7f784ff77015e06c14d560f6e528bc9f85f90a7d0b3dfd",
+    "https://data.openisp.au/processed/traces/isp_2024/project/reference_year=2016/data_1.parquet": "7077a054905087a91f90861cade0e4498ecce1a97c5cf1184c941b66434cde3d",
+    "https://data.openisp.au/processed/traces/isp_2024/project/reference_year=2016/data_2.parquet": "9a723bd3aebb0d165e0254cf24b01e05dd9be2343f9d4d4552d05a089dd14ffe",
+    "https://data.openisp.au/processed/traces/isp_2024/zone/reference_year=2016/data_0.parquet": "ee1a092fb75158f972391a0c6f07fbd215ddaf14eec807a9b6b1b4909e1d1c97",
+    "https://data.openisp.au/processed/traces/isp_2024/zone/reference_year=2016/data_1.parquet": "bcddfe234f25594a5bae24ef4441e983223d59bca28f52e04414395cb169925d",
+    "https://data.openisp.au/processed/traces/isp_2024/zone/reference_year=2016/data_2.parquet": "f636bbe65b281a5e5feea40c6a2109cef017dbdf41dbea96bd6a6f6c5a45fd40",
+    "https://data.openisp.au/processed/traces/isp_2024/demand/scenario=Step%20Change/reference_year=2016/data_0.parquet": "8553e2b71d1e541ff7ac4fb4b8c87c7b0e716e6318f849257258e5a903ff0e2d"
+  },
+  "units": "inputs/final-2026-isp-v7.8/units.csv"
+}

@@ -24,6 +24,32 @@ def fetch_traces() -> None:
 
 
 @app.command()
+def fetch_weather(
+    first: int = 2011, last: int = 2023, keep_raw: bool = False, overwrite: bool = False
+) -> None:
+    """Download weather reference years from openISP and keep hourly series in inputs/weather/.
+
+    About 1.7 GB is downloaded per year and deleted after extraction (unless --keep-raw)."""
+    import pandas as pd
+    import yaml
+
+    from nemmodel.weather import fetch_year
+
+    cfg = yaml.safe_load((ROOT / "config" / "assumptions.yaml").read_text())
+    units_file = ROOT / cfg["inputs"] / "units.csv"
+    units = pd.read_csv(units_file)
+    out = ROOT / "inputs" / "weather"
+    for ref in range(first, last + 1):
+        if (out / f"reference_year={ref}").exists() and not overwrite:
+            typer.echo(f"{ref}: already present")
+            continue
+        fetch_year(ref, units, str(units_file.relative_to(ROOT)),
+                   ModelYear(cfg["financial_year_end"]), ROOT / "data" / "raw" / "traces_tmp",
+                   out, keep_raw)  # fmt: skip
+        typer.echo(f"{ref}: done")
+
+
+@app.command()
 def build_inputs(
     workbook: Path,
     label: str = typer.Option(..., help='Folder name under inputs/, e.g. "final-2026-isp"'),
@@ -46,7 +72,7 @@ def study(samples: int = 0, workers: int = 3, out: Path = ROOT / "results") -> N
     from nemmodel.study import run_study
 
     logging.disable(logging.WARNING)
-    eue = run_study(ROOT, TRACES, out, samples or None, workers)
+    eue = run_study(ROOT, out, samples or None, workers)
     typer.echo(eue.to_string(index=False))
 
 

@@ -149,16 +149,21 @@ def test_eue_weighting(cfg):
     demand = pd.DataFrame(
         100.0, index=idx, columns=[f"{r}_{p}" for r in regions for p in ("POE10", "POE50")]
     )
-    data = Data(pd.DataFrame(), pd.DataFrame(), demand, pd.DataFrame())
+    data = Data(pd.DataFrame(), pd.DataFrame(), {2018: (demand, pd.DataFrame()),
+                                                  2019: (demand, pd.DataFrame())})  # fmt: off
     rows = [
-        {"case": "c", "poe": p, "sample": s, **{f"unserved_mwh_{r}": 0.0 for r in regions}}
+        {"case": "c", "poe": p, "reference_year": y, "sample": s,
+         **{f"unserved_mwh_{r}": 0.0 for r in regions}}
         for p in ("POE10", "POE50")
+        for y in (2018, 2019)
         for s in range(2)
-    ]
-    rows[0]["unserved_mwh_SA1"] = 2.0  # POE10, one of two samples
+    ]  # fmt: off
+    rows[0]["unserved_mwh_SA1"] = 4.0  # POE10, one of four (weather year, draw) runs
     t = eue_table(pd.DataFrame(rows), data, cfg).set_index("region")
     assert t.loc["SA1", "eue_mwh"] == pytest.approx(0.304 * 1.0)
     assert t.loc["SA1", "eue_pct"] == pytest.approx(100 * 0.304 / 1000)
+    assert t.loc["SA1", "draws"] == 4
+    assert t.loc["SA1", "draws_with_unserved"] == 1
     assert not t.loc["SA1", "meets_standard"]
     assert t.loc["NSW1", "meets_standard"]
 
@@ -186,7 +191,8 @@ def test_seasonal_hydro_carries_water_between_windows(cfg, tiny):
     units = pd.DataFrame([unit("H1", "TAS1", "hydro", 200, 0)])
     demand = pd.DataFrame(0.0, index=idx, columns=["QLD1", "NSW1", "VIC1", "SA1", "TAS1"])
     demand.loc[idx[48:], "TAS1"] = 100.0  # 2,400 MWh needed on day 3
-    inflows = pd.DataFrame({"scheme": "tasmania", "reference_year": cfg["trace_reference_year"],
+    ref = cfg["weather"]["reference_years"][0]
+    inflows = pd.DataFrame({"scheme": "tasmania", "reference_year": ref,
                             "month": ["Jul"], "inflow": [0.0]})  # fmt: off
     n = build_network(units, tiny["ics"].iloc[0:0], demand, pd.DataFrame(index=idx), cfg,
                       hydro_inflows=inflows)  # fmt: off
@@ -211,7 +217,8 @@ def test_seasonal_hydro_respects_floor_and_returns_to_start(cfg, tiny):
     units = pd.DataFrame([unit("H1", "TAS1", "hydro", 500, 0)])
     demand = pd.DataFrame(0.0, index=idx, columns=["QLD1", "NSW1", "VIC1", "SA1", "TAS1"])
     demand["TAS1"] = 200.0  # 14.4 GWh wanted; only 2 GWh may be drawn (5 GWh start, 3 floor)
-    inflows = pd.DataFrame({"scheme": "tasmania", "reference_year": cfg["trace_reference_year"],
+    ref = cfg["weather"]["reference_years"][0]
+    inflows = pd.DataFrame({"scheme": "tasmania", "reference_year": ref,
                             "month": ["Jul"], "inflow": [0.0]})  # fmt: off
     n = build_network(units, tiny["ics"].iloc[0:0], demand, pd.DataFrame(index=idx), cfg,
                       hydro_inflows=inflows)  # fmt: off

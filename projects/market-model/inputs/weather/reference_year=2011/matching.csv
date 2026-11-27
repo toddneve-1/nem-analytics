@@ -1,0 +1,11 @@
+region,group,source,units,matched_units,matched_mw,total_mw
+NSW1,solar,project traces,49,41,5568.8,6803.900000000001
+NSW1,wind,project traces,22,22,3529.8000000000006,3529.8000000000006
+QLD1,solar,project traces,48,35,3675.1000000000004,6645.6
+QLD1,wind,project traces,11,9,2631.8999999999996,3138.2999999999997
+SA1,solar,project traces,17,16,713.9000000000001,969.7
+SA1,wind,project traces,26,26,2752.2000000000003,2752.2
+TAS1,solar,zone mean (SAT),1,0,0.0,360.8
+TAS1,wind,project traces,5,4,561.6,582.6
+VIC1,solar,project traces,24,18,1774.5,2530.3
+VIC1,wind,project traces,36,34,5358.7,6007.3

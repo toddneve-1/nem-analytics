@@ -1,0 +1,8 @@
+{
+  "reference_year": 2018,
+  "financial_year": "2028-29",
+  "scenario": "Step Change",
+  "trace_source": "2024 ISP traces (AEMO), via the openISP mirror",
+  "files": "already downloaded (openISP example set)",
+  "units": "inputs/final-2026-isp-v7.8/units.csv"
+}
