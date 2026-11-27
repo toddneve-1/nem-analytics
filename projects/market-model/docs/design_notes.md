@@ -58,8 +58,25 @@ lists the simplifications. Later versions deepen the parts that matter most for 
   (its active storage is about 5,300 GL, enough for several years), so it is given one year of
   its output. The 50 % starting level and 20 % floor are assumptions, the floor standing in for
   water held back against drought.
-* **No unit commitment.** No minimum loads, ramp limits or start costs. Coal can follow demand
-  freely, which understates the need for flexible gas.
+* **Minimum running levels, ramping and start-up delays (added after v0.1).** Coal and
+  combined-cycle gas stations have, from the workbook, minimum stable levels (coal: the "typical
+  lowest band", 30-51 % of capacity) and ramp rates (coal: 44-107 % of capacity per hour), plus
+  assumed minimum up and down times (coal 12 h and 8 h, CCGT 4 h and 4 h; the workbook has
+  none). The minimum down time stands in for start-up delay. Open-cycle gas and reciprocating
+  engines start in minutes and stay fully flexible. Each station has an "online share" between
+  0 and 1 each hour (PyPSA's linearised unit commitment): for a multi-unit station it reads as
+  the share of its units running. It is a linear programme, so it stays fast.
+
+  *Known weakness of the linear version:* a station can run "40 % online", so its minimum can
+  shrink to fit a short dip in demand, where real units would have to switch off and then wait
+  out their minimum down time. A test (`test_minimum_stable_level_and_down_time`) shows the
+  difference on a small case. An exact version, with one on/off decision per unit, is available
+  for validation (`unit_commitment.mode: exact_units`).
+
+  *Breakdowns override the minimum.* A station's minimum is capped each hour at what it can
+  produce (after outages and seasonal ratings). Without this, a unit required to stay on for its
+  minimum up time but broken down, or rated at zero (Tamar Valley in parts of the year), makes
+  the problem infeasible. Each station starts the year free to stay on or switch off.
 * **No network losses or intra-regional limits.**
 * **Unserved energy** is the output of a VoLL-priced load-shedding generator in each region.
   Where neighbouring regions are both short, how shortfall is shared between them is arbitrary
@@ -90,6 +107,21 @@ outages): 587 TJ/day against 1,174 TJ/day. The unconstrained peak sits at the to
 GSOO's 700–1,200 TJ/day range for southern GPG demand, so the reference is plausible. The cap
 itself is an illustrative stress case; v0.2 should derive it from southern supply capacity less
 non-GPG peak-day demand, using the GSOO facility data in the workbook.
+
+## Gas balance (groundwork, waiting on GSOO data)
+
+`config/gas_balance.yaml` and `nemmodel.gas` implement the data-based southern winter gas
+balance: production + supply from the north + storage withdrawal - other gas demand = gas
+available to power stations each day. Other demand is placed between the GSOO's average and
+peak winter day using southern electricity demand as a proxy for how cold the day is, so gas
+shortage and electricity stress fall on the same days. Storage withdrawal capacity comes from
+the workbook's GSOO facility data (now in `inputs/.../gas_infrastructure.csv`). Production,
+northern supply and other demand must come from the 2026 GSOO, which AEMO's site will not serve
+to automated downloads; until they are filled in, `load_balance` refuses to run and the study
+uses the illustrative cap. Days when other demand alone exceeds supply give power stations
+nothing; they are counted, and the shortfall to other gas users is reported, not modelled.
+Not yet represented: storage running down over a winter (Iona holds about 24 PJ, less than 90
+days at its 570 TJ/day withdrawal rate).
 
 ## Parallel runs
 

@@ -81,7 +81,12 @@ def demand_for(data: Data, poe: str) -> pd.DataFrame:
 
 
 def run_one(
-    data: Data, cfg: dict, case: Case, poe: str, sample: int | None, gas_cap: float | None
+    data: Data,
+    cfg: dict,
+    case: Case,
+    poe: str,
+    sample: int | None,
+    gas_cap: float | pd.Series | None,
 ) -> dict:
     """Dispatch one year. ``sample`` None means no forced outages."""
     units = fleet(data.units, case.coal, cfg)
@@ -151,6 +156,40 @@ def eue_table(runs: pd.DataFrame, data: Data, cfg: dict) -> pd.DataFrame:
     return t
 
 
+def tight_gas_cap(root: Path, cfg: dict, data: Data, out_dir: Path) -> float | pd.Series:
+    """Daily gas allowance for southern gas-powered generation in the tight-gas case.
+
+    ``illustrative``: a fixed fraction of the most the unconstrained model burns on a winter day
+    (workbook fleet, 10 % POE, no outages). ``gsoo``: the southern gas balance in
+    ``config/gas_balance.yaml``, which needs GSOO values. Days on which other gas demand alone
+    exceeds supply leave power stations nothing; they are counted, and the gas shortfall to
+    other users is reported but not modelled.
+    """
+    g = cfg["gas"]
+    if g["tight_case"] == "gsoo":
+        from nemmodel.gas import daily_allowance, load_balance
+
+        balance = load_balance(root / "config" / "gas_balance.yaml")
+        infra = pd.read_csv(root / cfg["inputs"] / "gas_infrastructure.csv")
+        south = demand_for(data, "POE50")[g["southern_regions"]].sum(axis=1)
+        raw = daily_allowance(balance, infra, south, g["constraint_months"])
+        record = {"method": "gsoo", "source": balance["source"],
+                  "allowance_tj_per_day": raw.round(1).astype(str).to_dict(),
+                  "days_other_demand_exceeds_supply": int((raw < 0).sum()),
+                  "other_users_shortfall_tj": float(-raw[raw < 0].sum())}  # fmt: off
+        cap = raw.clip(lower=0)
+    elif g["tight_case"] == "illustrative":
+        ref = run_one(data, cfg, Case("workbook", "unconstrained"), "POE10", None, None)
+        cap = g["tight_fraction"] * ref["gas_max_winter_tj"]
+        record = {"method": "illustrative",
+                  "reference_max_winter_day_tj": ref["gas_max_winter_tj"],
+                  "tight_fraction": g["tight_fraction"], "tight_cap_tj_per_day": cap}  # fmt: off
+    else:
+        raise ValueError(f"unknown gas.tight_case: {g['tight_case']}")
+    (out_dir / "gas_calibration.json").write_text(json.dumps(record, indent=2, default=str))
+    return cap
+
+
 def run_study(
     root: Path, trace_dir: Path, out_dir: Path, samples: int | None = None, workers: int = 4
 ) -> pd.DataFrame:
@@ -159,19 +198,7 @@ def run_study(
     samples = samples or cfg["reliability"]["samples"]
     out_dir.mkdir(parents=True, exist_ok=True)
 
-    # Calibrate the tight-winter gas allowance on the workbook fleet, 10 % POE, no outages.
-    ref = run_one(data, cfg, Case("workbook", "unconstrained"), "POE10", None, None)
-    cap = cfg["gas"]["tight_fraction"] * ref["gas_max_winter_tj"]
-    (out_dir / "gas_calibration.json").write_text(
-        json.dumps(
-            {
-                "reference_max_winter_day_tj": ref["gas_max_winter_tj"],
-                "tight_fraction": cfg["gas"]["tight_fraction"],
-                "tight_cap_tj_per_day": cap,
-            },
-            indent=2,
-        )
-    )
+    cap = tight_gas_cap(root, cfg, data, out_dir)
 
     tasks = [
         (data, cfg, Case(c, g), poe, s, cap)

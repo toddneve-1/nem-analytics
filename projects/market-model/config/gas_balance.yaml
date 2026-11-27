@@ -1,0 +1,26 @@
+# Southern gas balance for winter days of FY2028-29 (NSW, VIC, SA, TAS: the GSOO southern
+# system). Gas available to power stations on a winter day =
+#     southern production + supply from the north + storage withdrawal - other gas demand.
+#
+# Values marked GSOO must be read from the 2026 GSOO (see docs/data_needed.md). The model
+# refuses to use this balance while any of them is blank, so nothing runs on made-up numbers.
+# Until then the study uses the illustrative cap in assumptions.yaml.
+
+source: null                        # GSOO: e.g. "2026 GSOO, figure 12 and data file, sheet X"
+
+winters:
+  # Calendar winters inside FY2028-29: July-August 2028 and June 2029.
+  2028:
+    southern_production_tj_d: null  # GSOO: southern fields' peak-day production capacity
+    northern_supply_tj_d: null      # GSOO: gas from Queensland available to the south
+    other_demand_peak_tj_d: null    # GSOO: peak-day demand excluding power generation (1-in-2)
+    other_demand_average_tj_d: null # GSOO: average winter-day demand excluding power generation
+  2029:
+    southern_production_tj_d: null
+    northern_supply_tj_d: null
+    other_demand_peak_tj_d: null
+    other_demand_average_tj_d: null
+
+# Storage withdrawal is taken from the workbook (online southern storage facilities: Iona,
+# Dandenong LNG, Newcastle, Moomba) unless set here.
+storage_withdrawal_tj_d: null

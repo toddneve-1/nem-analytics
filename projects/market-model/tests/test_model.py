@@ -219,3 +219,79 @@ def test_seasonal_hydro_respects_floor_and_returns_to_start(cfg, tiny):
     assert soc.min() >= 3000 - 1e-3
     assert soc.iloc[-1] == pytest.approx(5000)  # ends where it started, so nothing is drawn
     assert n.generators_t.p["TAS1 unserved"].sum() == pytest.approx(14400)
+
+
+@pytest.mark.parametrize(
+    ("mode", "expected_unserved"), [("exact_units", 600.0), ("linearised", 0.0)]
+)
+def test_minimum_stable_level_and_down_time(cfg, tiny, mode, expected_unserved):
+    """Coal (500 MW, minimum 250 MW, 8 h minimum off time) and 300 MW of gas serve 400 MW,
+    except a 100 MW dip in hours 10-11. On/off decisions per unit force coal off through the dip
+    and keep it off until hour 18, leaving 100 MW short in hours 12-17. The linear stand-in can
+    run the station "40 % online" through the dip, so nothing is short: its known weakness."""
+    import copy
+
+    cfg = copy.deepcopy(cfg)
+    cfg["dispatch"]["window_hours"] = 24
+    cfg["unit_commitment"].update(mode=mode, min_up_hours={"coal": 2, "ccgt": 2},
+                                  min_down_hours={"coal": 8, "ccgt": 2})  # fmt: off
+    idx = pd.date_range("2028-07-01", periods=24, freq="h")
+    units = pd.DataFrame([unit("COAL", "NSW1", "coal", 500, 30, msl_mw=250.0),
+                          unit("GAS", "NSW1", "ocgt", 300, 150)])  # fmt: off
+    demand = pd.DataFrame(0.0, index=idx, columns=["QLD1", "NSW1", "VIC1", "SA1", "TAS1"])
+    demand["NSW1"] = 400.0
+    demand.loc[idx[10:12], "NSW1"] = 100.0
+    n = build_network(units, tiny["ics"].iloc[0:0], demand, pd.DataFrame(index=idx), cfg)
+    solve(n, cfg)
+    assert n.generators_t.p["NSW1 unserved"].sum() == pytest.approx(expected_unserved, abs=1e-3)
+
+
+def test_ramp_limit(cfg, tiny):
+    import copy
+
+    cfg = copy.deepcopy(cfg)
+    cfg["dispatch"]["window_hours"] = 24
+    cfg["unit_commitment"]["enabled"] = False
+    idx = pd.date_range("2028-07-01", periods=24, freq="h")
+    # 500 MW coal that can move 2.5 MW/min = 150 MW/h; gas fills what coal cannot reach.
+    coal = unit("COAL", "NSW1", "coal", 500, 30, ramp_up_mw_min=2.5, ramp_down_mw_min=2.5)
+    units = pd.DataFrame([coal, unit("GAS", "NSW1", "ocgt", 500, 150)])
+    demand = pd.DataFrame(0.0, index=idx, columns=["QLD1", "NSW1", "VIC1", "SA1", "TAS1"])
+    demand["NSW1"] = 100.0
+    demand.loc[idx[12:], "NSW1"] = 500.0
+    n = build_network(units, tiny["ics"].iloc[0:0], demand, pd.DataFrame(index=idx), cfg)
+    solve(n, cfg)
+    coal = n.generators_t.p["NSW1 COAL coal"]
+    assert coal.diff().abs().max() <= 150 + 1e-6
+
+
+def test_gas_balance_refuses_missing_gsoo_values(tmp_path):
+    from nemmodel.gas import MissingGasDataError, load_balance
+
+    from .conftest import ROOT
+
+    with pytest.raises(MissingGasDataError, match="source"):
+        load_balance(ROOT / "config" / "gas_balance.yaml")  # committed template is blank
+
+
+def test_gas_balance_daily_allowance():
+    from nemmodel.gas import daily_allowance
+
+    w = {"southern_production_tj_d": 1000.0, "northern_supply_tj_d": 300.0,
+         "other_demand_peak_tj_d": 1500.0, "other_demand_average_tj_d": 1100.0}  # fmt: off
+    balance = {"winters": {2028: w}, "storage_withdrawal_tj_d": 500.0}
+    idx = pd.date_range("2028-07-01", periods=3 * 24, freq="h")
+    demand = pd.Series(np.repeat([100.0, 200.0, 300.0], 24), index=idx)  # mean 200, max 300
+    a = daily_allowance(balance, pd.DataFrame(), demand, [7])
+    supply = 1000 + 300 + 500
+    # Day 1 below average: average demand. Day 2 average. Day 3 the coldest: peak demand.
+    assert a.tolist() == pytest.approx([supply - 1100, supply - 1100, supply - 1500])
+
+
+def test_gas_cap_varies_by_day(cfg, tiny):
+    units = tiny["units"][tiny["units"]["group"] != "coal"]
+    n = build_network(units, tiny["ics"], tiny["demand"], tiny["cf"], cfg)
+    days = pd.DatetimeIndex(["2028-07-01", "2028-07-02"])
+    solve(n, cfg, GasConstraint(["NSW1", "VIC1"], [7], pd.Series([72.0, 24.0], index=days)))
+    burn = daily_southern_gas_tj(n, ["NSW1", "VIC1"])
+    assert burn.tolist() == pytest.approx([72.0, 24.0], rel=1e-6)

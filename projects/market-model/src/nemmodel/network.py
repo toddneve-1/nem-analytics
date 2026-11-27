@@ -37,9 +37,12 @@ WHEEL_COST = 0.01  # $/MWh on interconnector flow, to stop flows that serve no p
 
 @dataclass
 class GasConstraint:
+    """Daily cap on gas burnt by gas-powered generation in ``regions`` during ``months``: one
+    figure for every day, or a Series of TJ indexed by day (midnight timestamps)."""
+
     regions: list[str]
     months: list[int]
-    cap_tj_per_day: float
+    cap_tj_per_day: float | pd.Series
 
 
 def unit_ratings(units: pd.DataFrame, index: pd.DatetimeIndex, cfg: dict) -> pd.DataFrame:
@@ -131,15 +134,41 @@ def build_network(
     if available is not None:
         mw = mw * available.set_axis(idx).reindex(columns=mw.columns, fill_value=1.0)
 
-    # Thermal: by station and group.
-    th = units[units["group"].isin(THERMAL)]
-    for (region, station, group), g in th.groupby(["region", "station", "group"]):
+    # Thermal: by power station (or by unit for committable groups in "exact_units" mode).
+    uc = cfg.get("unit_commitment", {"enabled": False})
+    uc_groups = set(uc["groups"]) if uc.get("enabled") else set()
+    th = units[units["group"].isin(THERMAL)].copy()
+    th["key"] = th["station"]
+    if uc.get("mode") == "exact_units":
+        th.loc[th["group"].isin(uc_groups), "key"] = th["unit_id"]
+    for (region, key, group), g in th.groupby(["region", "key", "group"]):
         avail_mw = mw[g["unit_id"]].sum(axis=1)
         p_nom = float(avail_mw.max()) or float(g["capacity_mw"].sum())
         w = g["capacity_mw"]
+        attrs = {}
+        if group in uc_groups:
+            # A breakdown or a zero seasonal rating overrides the minimum: the minimum is capped
+            # at what the station can produce that hour (otherwise a station required to stay
+            # on, for its minimum up time, could not, and the problem would have no solution).
+            msl_pu = float(g["msl_mw"].sum()) / p_nom
+            attrs = {
+                "committable": True,
+                "p_min_pu": np.minimum(msl_pu, avail_mw / p_nom),
+                "min_up_time": int(uc["min_up_hours"][group]),
+                "min_down_time": int(uc["min_down_hours"][group]),
+                # Start the year free to stay on or switch off (not locked on).
+                "up_time_before": int(uc["min_up_hours"][group]),
+            }
+        if g["ramp_up_mw_min"].notna().all():
+            up = float(g["ramp_up_mw_min"].sum()) * 60 / p_nom
+            down = float(g["ramp_down_mw_min"].fillna(g["ramp_up_mw_min"]).sum()) * 60 / p_nom
+            if up < 1:
+                attrs["ramp_limit_up"] = up
+            if down < 1:
+                attrs["ramp_limit_down"] = down
         n.add(
             "Generator",
-            f"{region} {station} {group}",
+            f"{region} {key} {group}",
             bus=region,
             carrier=group,
             p_nom=p_nom,
@@ -148,6 +177,7 @@ def build_network(
             efficiency=float(3.6 / np.average(g["heat_rate"], weights=w))
             if g["heat_rate"].notna().all()
             else 1.0,
+            **attrs,
         )
 
     # Wind and solar: by region and group.
@@ -283,9 +313,10 @@ def _gas_tj(n: pypsa.Network, gens: pd.Index) -> pd.Series:
     return 3.6 / n.generators.loc[gens, "efficiency"] / 1000.0
 
 
-def _optimise(n: pypsa.Network, sns: pd.Index, extra) -> None:
+def _optimise(n: pypsa.Network, sns: pd.Index, extra, linearised: bool = True) -> None:
     status, cond = n.optimize(
         snapshots=sns,
+        linearized_unit_commitment=linearised,
         solver_name="highs",
         solver_options={"output_flag": False, "threads": 1},
         extra_functionality=extra,
@@ -309,6 +340,7 @@ def solve(n: pypsa.Network, cfg: dict, gas: GasConstraint | None = None) -> pyps
     Without seasonal storage, only stage 2 runs.
     """
     hours = cfg["dispatch"]["window_hours"]
+    linearised = cfg.get("unit_commitment", {}).get("mode", "linearised") == "linearised"
     gens = southern_gas_generators(n, gas.regions) if gas else pd.Index([])
     tj = _gas_tj(n, gens) if gas else None
 
@@ -326,7 +358,15 @@ def solve(n: pypsa.Network, cfg: dict, gas: GasConstraint | None = None) -> pyps
             days[winter], coords={"snapshot": sns[winter]}, dims="snapshot", name="day"
         )
         daily = (p * coef).sum(dim).groupby(day).sum()
-        n.model.add_constraints(daily <= gas.cap_tj_per_day, name="southern_gas_daily")
+        cap = gas.cap_tj_per_day
+        if isinstance(cap, pd.Series):
+            days_here = pd.DatetimeIndex(daily.indexes["day"])
+            missing = days_here.difference(cap.index)
+            if len(missing):
+                raise ValueError(f"no gas allowance for {len(missing)} days, e.g. {missing[0]}")
+            cap = xr.DataArray(cap.loc[days_here].to_numpy(), coords={"day": days_here},
+                               dims="day")  # fmt: off
+        n.model.add_constraints(daily <= cap, name="southern_gas_daily")
 
     seasonal = n.storage_units.index[n.storage_units["carrier"] == SEASONAL]
     energy = n.storage_units.loc[seasonal, "p_nom"] * n.storage_units.loc[seasonal, "max_hours"]
@@ -348,7 +388,16 @@ def solve(n: pypsa.Network, cfg: dict, gas: GasConstraint | None = None) -> pyps
         targets.iloc[-1] = n.storage_units.loc[seasonal, "state_of_charge_initial"]
         n.storage_units_t.state_of_charge_set = targets
         start_level = n.storage_units.loc[seasonal, "state_of_charge_initial"].copy()
-        _optimise(n, n.snapshots, extra)
+        # The seasonal plan leaves out on/off decisions (minimum levels, up and down times):
+        # they barely change how water is spread over the year but make a whole-year solve
+        # several times slower. Stage 2 applies them week by week.
+        committable = n.generators.index[n.generators["committable"]]
+        p_min = n.generators_t.p_min_pu[committable.intersection(n.generators_t.p_min_pu.columns)]
+        n.generators.loc[committable, "committable"] = False
+        n.generators_t.p_min_pu = n.generators_t.p_min_pu.drop(columns=p_min.columns)
+        _optimise(n, n.snapshots, extra, linearised)
+        n.generators.loc[committable, "committable"] = True
+        n.generators_t.p_min_pu = pd.concat([n.generators_t.p_min_pu, p_min], axis=1)
         plan = n.storage_units_t.state_of_charge[seasonal].copy()
 
     for start in range(0, len(n.snapshots), hours):
@@ -361,7 +410,7 @@ def solve(n: pypsa.Network, cfg: dict, gas: GasConstraint | None = None) -> pyps
             targets = pd.DataFrame(np.nan, index=n.snapshots, columns=seasonal)
             targets.loc[sns[-1]] = plan.loc[sns[-1]]
             n.storage_units_t.state_of_charge_set = targets
-        _optimise(n, sns, extra)  # stage 2
+        _optimise(n, sns, extra, linearised)  # stage 2
 
     if plan is not None:
         n.storage_units.loc[seasonal, "state_of_charge_initial"] = start_level

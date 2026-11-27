@@ -19,6 +19,18 @@ dispatch:
   battery_efficiency: 0.92        # one-way (round trip about 0.85); storage is cyclic per window
   pumped_hydro_efficiency: 0.87   # one-way (round trip about 0.76)
 
+# Minimum running levels, ramping and start-up delays for coal and combined-cycle gas. Fast-start
+# open-cycle gas and reciprocating engines stay fully flexible. Minimum stable levels and ramp
+# rates are from the workbook; minimum up and down times are assumptions (typical values; the
+# workbook has none). Each station's "online share" between 0 and 1 is a linear stand-in for how
+# many of its units are running (PyPSA's linearised unit commitment).
+unit_commitment:
+  enabled: true
+  groups: [coal, ccgt]
+  mode: linearised                # or "exact_units": one on/off decision per unit (validation)
+  min_up_hours: {coal: 12, ccgt: 4}     # once started, run at least this long. Assumption
+  min_down_hours: {coal: 8, ccgt: 4}    # once stopped, stay off this long (start-up delay). Assumption
+
 # Conventional hydro. The two large schemes are planned over the whole year (stage 1 of the
 # solve) and then dispatched week by week following that plan (stage 2); smaller schemes are
 # treated like storage that returns to its starting level each week.
@@ -48,6 +60,9 @@ seasons:                          # which workbook rating applies in each calend
 gas:
   southern_regions: [NSW1, VIC1, SA1, TAS1]   # GSOO southern system
   constraint_months: [6, 7, 8]                # winter
+  # How the tight-gas case caps gas for power stations: "illustrative" (below) until the GSOO
+  # values in config/gas_balance.yaml are filled in, then "gsoo" (daily southern gas balance).
+  tight_case: illustrative
   # Tight-winter case: the gas available to southern gas-powered generation on any winter day,
   # as a fraction of the most the unconstrained model burns on a winter day. Illustrative for
   # v0.1; to be calibrated against the GSOO peak-day supply-demand balance.

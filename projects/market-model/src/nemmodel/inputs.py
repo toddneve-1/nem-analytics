@@ -153,6 +153,26 @@ def load_units(parser, year: ModelYear, scenario: str = "Step Change") -> pd.Dat
     df = df.merge(vom[["IASR ID", vom_col]], on="IASR ID", how="left")
     df = df.rename(columns={"Heat rate (GJ/MWh)": "heat_rate", vom_col: "vom"})
 
+    # Minimum stable levels (coal: the typical lowest band they run at; gas: the workbook's
+    # single figure) and ramp rates. "Assumed sufficiently high" ramp rates become blank (no
+    # limit).
+    coal_msl = parser.get_table("coal_minimum_stable_level")
+    coal_msl = coal_msl[["IASR ID", COAL_MSL_COLUMN]].rename(columns={COAL_MSL_COLUMN: "msl_mw"})
+    gpg_msl = parser.get_table("gpg_min_stable_level_existing_generators")
+    gpg_msl = gpg_msl[["IASR ID", "Min Stable Level (MW)"]].rename(
+        columns={"Min Stable Level (MW)": "msl_mw"}
+    )
+    msl = pd.concat([coal_msl, gpg_msl]).drop_duplicates("IASR ID")
+    df = df.merge(msl, on="IASR ID", how="left")
+    ramps = parser.get_table("ramp_rates_existing_generators").rename(
+        columns={"Max Ramp Up (MW/min)": "ramp_up_mw_min",
+                 "Max Ramp Down (MW/min)": "ramp_down_mw_min"}
+    )  # fmt: off
+    df = df.merge(ramps[["IASR ID", "ramp_up_mw_min", "ramp_down_mw_min"]], on="IASR ID",
+                  how="left")  # fmt: off
+    for c in ("msl_mw", "ramp_up_mw_min", "ramp_down_mw_min"):
+        df[c] = pd.to_numeric(df[c], errors="coerce")
+
     # Seasonal ratings for the year: summer typical / summer peak for the FY, and winter for the
     # calendar winters inside it (2028 for Jul-Sep 2028, 2029 for Apr-Jun 2029).
     y = year.end_year
@@ -225,6 +245,9 @@ def load_units(parser, year: ModelYear, scenario: str = "Step Change") -> pd.Dat
         "vom",
         "fuel_price",
         "srmc",
+        "msl_mw",
+        "ramp_up_mw_min",
+        "ramp_down_mw_min",
         "for_full",
         "for_partial",
         "partial_derate",
@@ -308,6 +331,8 @@ def load_interconnectors(parser, year: ModelYear) -> pd.DataFrame:
     return df
 
 
+COAL_MSL_COLUMN = "Minimum Stable Level (MW)_Typical Lowest Band"
+
 # Monthly hydro inflow tables used by the model, and their units in the workbook.
 HYDRO_INFLOW_TABLES = {
     "tasmania": ("hydro_inflows_tas", "GWh"),
@@ -336,6 +361,48 @@ def load_hydro_inflows(parser) -> pd.DataFrame:
     return pd.DataFrame(rows)
 
 
+SOUTHERN_STATES = ("NSW", "VIC", "SA", "TAS")
+
+
+def load_gas_infrastructure(parser) -> pd.DataFrame:
+    """Gas processing plants, storage and pipelines from the workbook (2024 and 2025 GSOO data).
+
+    One row per facility with its kind, status, location and daily capacity (TJ/day). Pipeline
+    capacities are often given per direction ("565 South 195 North"); the text is kept as
+    published in ``capacity_text`` and the first number is parsed into ``capacity_tj_d``.
+    ``southern`` marks facilities located in NSW, VIC, SA or TAS (a pipeline touching one counts).
+    """
+    plants = parser.get_table("gas_system_properties_processing_facilities")
+    storage = parser.get_table("gas_system_properties_storage_facilities")
+    pipes = parser.get_table("gas_system_properties_pipelines")
+    cap_col = "Capacity (TJ per day)"
+    rows = []
+    for _, r in plants.iterrows():
+        rows.append({"kind": "processing", "name": r["Name"], "status": r["Status"],
+                     "location": r["Location"], "capacity_text": str(r[cap_col]),
+                     "storage_pj": np.nan, "source": r["Source"]})  # fmt: off
+    for _, r in storage.iterrows():
+        rows.append({"kind": "storage", "name": r["Storage Facility Name"], "status": r["Status"],
+                     "location": r["Location"],
+                     "capacity_text": str(r["Withdrawl Rate from Storage (TJ/day)"]),
+                     "storage_pj": pd.to_numeric(str(r["Storage Capacity (PJ)"]).split()[-1],
+                                                 errors="coerce"),
+                     "source": r["Source"]})  # fmt: off
+    for _, r in pipes.iterrows():
+        rows.append({"kind": "pipeline", "name": r["Name"], "status": r["Status"],
+                     "location": r["Location"], "capacity_text": str(r[cap_col]),
+                     "storage_pj": np.nan, "source": r["Source"]})  # fmt: off
+    df = pd.DataFrame(rows)
+    df["capacity_tj_d"] = pd.to_numeric(
+        df["capacity_text"].str.extract(r"([0-9]+(?:\.[0-9]+)?)")[0], errors="coerce"
+    )
+    loc = df["location"].astype(str).str.upper()
+    df["southern"] = loc.apply(lambda x: any(st in x for st in SOUTHERN_STATES))
+    # Storage locations are free text (e.g. "Port Campbell, Victoria").
+    df.loc[loc.str.contains("VICTORIA|NEW SOUTH WALES|TOMAGO"), "southern"] = True
+    return df
+
+
 def write_inputs(
     workbook: Path, out_dir: Path, year: ModelYear, scenario: str, source_url: str
 ) -> dict:
@@ -349,6 +416,7 @@ def write_inputs(
     units.to_csv(out_dir / "units.csv", index=False)
     ics.to_csv(out_dir / "interconnectors.csv", index=False)
     load_hydro_inflows(parser).to_csv(out_dir / "hydro_inflows.csv", index=False)
+    load_gas_infrastructure(parser).to_csv(out_dir / "gas_infrastructure.csv", index=False)
     manifest = {
         "workbook": {
             "url": source_url,

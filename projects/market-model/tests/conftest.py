@@ -40,6 +40,9 @@ def unit(uid: str, region: str, group: str, cap: float, srmc: float, **kw) -> di
         "mttr_partial": np.nan,
         "rating_summer_typical": cap,
         "rating_winter_early": cap,
+        "msl_mw": 0.0,
+        "ramp_up_mw_min": np.nan,
+        "ramp_down_mw_min": np.nan,
         "rating_winter_late": cap,
     }
     base.update(kw)
