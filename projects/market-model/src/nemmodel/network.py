@@ -34,6 +34,7 @@ SEASONAL = "seasonal_hydro"  # storage planned over the whole year (Tasmania, Sn
 # behaviour PyPSA relies on today is the legacy one, so these notices are silenced.
 warnings.filterwarnings("ignore", message=".*Under v1.*")
 warnings.filterwarnings("ignore", message=".*absent slots.*")
+IO_API = "direct"  # pass the problem to HiGHS in memory (no LP file): faster, less memory
 WHEEL_COST = 0.01  # $/MWh on interconnector flow, to stop flows that serve no purpose
 
 
@@ -319,6 +320,7 @@ def _optimise(n: pypsa.Network, sns: pd.Index, extra, linearised: bool = True) -
     status, cond = n.optimize(
         snapshots=sns,
         linearized_unit_commitment=linearised,
+        io_api=IO_API,
         solver_name="highs",
         solver_options={"output_flag": False, "threads": 1},
         extra_functionality=extra,
@@ -327,6 +329,40 @@ def _optimise(n: pypsa.Network, sns: pd.Index, extra, linearised: bool = True) -
     )
     if status != "ok":
         raise RuntimeError(f"window starting {sns[0]}: {status} ({cond})")
+
+
+def _planning_copy(n: pypsa.Network, step: int) -> pypsa.Network:
+    """A copy of ``n`` for the whole-year water plan, in steps of ``step`` hours.
+
+    Time series are averaged over each step and snapshot weightings set to ``step`` hours, so
+    energy and storage balances still add up. On/off decisions, minimum levels and ramp limits
+    are left out: they barely change how water is spread over a year but make the whole-year
+    solve several times slower and larger.
+    """
+    m = n.copy()
+    m.generators["committable"] = False
+    m.generators["ramp_limit_up"] = np.nan
+    m.generators["ramp_limit_down"] = np.nan
+    m.generators_t.p_min_pu = pd.DataFrame(index=n.snapshots)
+    if step == 1:
+        return m
+    if len(n.snapshots) % step:
+        raise ValueError(f"{len(n.snapshots)} hours is not a whole number of {step}-hour steps")
+    block = np.arange(len(n.snapshots)) // step
+    coarse_index = n.snapshots[::step]
+    saved = {}
+    for c in m.components:
+        for attr, df in c.dynamic.items():
+            if df.empty or attr in {"p", "q", "state_of_charge", "status", "start_up",
+                                    "shut_down", "p0", "p1", "marginal_price"}:  # fmt: off
+                continue
+            agg = df.groupby(block).last() if attr.endswith("_set") else df.groupby(block).mean()
+            saved[(c.name, attr)] = agg.set_axis(coarse_index)
+    m.set_snapshots(coarse_index)
+    m.snapshot_weightings.loc[:, :] = step
+    for (name, attr), df in saved.items():
+        m.components[name].dynamic[attr] = df
+    return m
 
 
 def solve(n: pypsa.Network, cfg: dict, gas: GasConstraint | None = None) -> pypsa.Network:
@@ -356,6 +392,9 @@ def solve(n: pypsa.Network, cfg: dict, gas: GasConstraint | None = None) -> pyps
         dim = next(d for d in p.dims if d != "snapshot")
         p = p.sel({dim: list(gens), "snapshot": sns[winter]})
         coef = xr.DataArray(tj.to_numpy(), coords={dim: list(gens)}, dims=dim)
+        hours_per_step = n.snapshot_weightings["generators"].loc[sns[winter]]
+        coef = coef * xr.DataArray(hours_per_step.to_numpy(), coords={"snapshot": sns[winter]},
+                                   dims="snapshot")  # fmt: off
         day = xr.DataArray(
             days[winter], coords={"snapshot": sns[winter]}, dims="snapshot", name="day"
         )
@@ -390,17 +429,16 @@ def solve(n: pypsa.Network, cfg: dict, gas: GasConstraint | None = None) -> pyps
         targets.iloc[-1] = n.storage_units.loc[seasonal, "state_of_charge_initial"]
         n.storage_units_t.state_of_charge_set = targets
         start_level = n.storage_units.loc[seasonal, "state_of_charge_initial"].copy()
-        # The seasonal plan leaves out on/off decisions (minimum levels, up and down times):
-        # they barely change how water is spread over the year but make a whole-year solve
-        # several times slower. Stage 2 applies them week by week.
-        committable = n.generators.index[n.generators["committable"]]
-        p_min = n.generators_t.p_min_pu[committable.intersection(n.generators_t.p_min_pu.columns)]
-        n.generators.loc[committable, "committable"] = False
-        n.generators_t.p_min_pu = n.generators_t.p_min_pu.drop(columns=p_min.columns)
-        _optimise(n, n.snapshots, extra, linearised)
-        n.generators.loc[committable, "committable"] = True
-        n.generators_t.p_min_pu = pd.concat([n.generators_t.p_min_pu, p_min], axis=1)
-        plan = n.storage_units_t.state_of_charge[seasonal].copy()
+        step = cfg["dispatch"].get("plan_step_hours", 1)
+        if hours % step:
+            raise ValueError(f"window_hours ({hours}) must be a multiple of plan_step_hours")
+        m = _planning_copy(n, step)
+        _optimise(m, m.snapshots, extra, linearised)
+        # Plan levels at the end of each coarse step, placed on the hour that ends the step.
+        coarse = m.storage_units_t.state_of_charge[seasonal]
+        plan = pd.DataFrame(np.nan, index=n.snapshots, columns=seasonal)
+        plan.iloc[step - 1 :: step] = coarse.to_numpy()
+        del m
 
     for start in range(0, len(n.snapshots), hours):
         sns = n.snapshots[start : start + hours]

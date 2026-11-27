@@ -15,6 +15,7 @@ reliability:
 
 dispatch:
   window_hours: 168               # stage 2: weekly windows with perfect foresight in the week
+  plan_step_hours: 3              # stage 1: the whole-year water plan in 3-hour steps
   voll: 20000                     # $/MWh cost on unserved energy (well above any SRMC)
   battery_efficiency: 0.92        # one-way (round trip about 0.85); storage is cyclic per window
   pumped_hydro_efficiency: 0.87   # one-way (round trip about 0.76)

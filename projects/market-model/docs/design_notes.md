@@ -43,7 +43,11 @@ lists the simplifications. Later versions deepen the parts that matter most for 
      starting level each week (a weekly reset does little harm to batteries that cycle daily);
      the large schemes start and end each week at the planned level.
 
-  One year now takes about 136 seconds. The plan still has perfect foresight of the year's
+  The plan is solved in 3-hour steps (time series averaged, snapshot weightings of 3 hours) without
+  on/off decisions or ramp limits; checked against an hourly plan on the base case: cost within
+  0.05 %, Tasmanian levels within 26 GWh (Snowy's path differs more, but many Snowy schedules cost
+  almost the same). This cut a run's peak memory from 4.6 GB to 3.0 GB; problems are passed to
+  HiGHS in memory rather than through LP files. One year with outages takes about 3.5 minutes. The plan still has perfect foresight of the year's
   weather and outages, which real operators lack, so it remains optimistic.
 * **Hydro inflows from the workbook.** Tasmania: monthly inflow energy (GWh) for the whole
   scheme, for the trace weather year (FY2018: 9,122 GWh). Snowy: the workbook gives
