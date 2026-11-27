@@ -46,7 +46,7 @@ def eue_chart(eue: pd.DataFrame, cfg: dict, path: Path) -> None:
     width = 0.2
     x = np.arange(len(REGIONS))
     t = eue.set_index(["case", "region"])["eue_pct"]
-    floor = 1e-4  # log axis: zero EUE is drawn as a "0" label at the floor
+    floor = 1e-5  # log axis: values at or below the floor are labelled instead of drawn
     for i, case in enumerate(CASES):
         vals = np.array([t.get((case, r), np.nan) for r in REGIONS])
         xs = x + (i - 1.5) * width
@@ -62,7 +62,8 @@ def eue_chart(eue: pd.DataFrame, cfg: dict, path: Path) -> None:
         )
         for xi, v in zip(xs, vals, strict=True):
             if not v > floor:
-                ax.text(xi, floor * 1.15, "0", ha="center", va="bottom", fontsize=7, color=MUTED)
+                label = "0" if not v > 0 else "<"  # "<": above zero but below the axis floor
+                ax.text(xi, floor * 1.15, label, ha="center", va="bottom", fontsize=7, color=MUTED)
     std = cfg["reliability"]["standard_pct"]
     ax.axhline(std, color=TEXT, linewidth=1, linestyle="--")
     ax.annotate(
@@ -75,7 +76,7 @@ def eue_chart(eue: pd.DataFrame, cfg: dict, path: Path) -> None:
         fontsize=8,
     )
     ax.set_yscale("log")
-    ax.set_ylim(floor, 30)
+    ax.set_ylim(floor, 1)
     ax.set_xlim(-0.5, len(REGIONS) - 0.5)
     ax.yaxis.set_major_formatter(matplotlib.ticker.FuncFormatter(lambda v, _: f"{v:g}"))
     ax.set_xticks(x, REGIONS)
@@ -102,7 +103,7 @@ def samples_chart(runs: pd.DataFrame, path: Path) -> None:
                        label=f"{poe[:3]} {poe[3:]} %" if i == 0 else None)  # fmt: off
     ax.set_xticks(range(len(CASES)), [LABELS[c].replace(", ", ",\n") for c in CASES], fontsize=8)
     ax.set_ylabel("Unserved energy, NEM (GWh)", color=TEXT)
-    ax.set_title("Unserved energy in each outage sample (circles 50 % POE, triangles 10 % POE)",
+    ax.set_title("Unserved energy in each run (circles 50 % POE, triangles 10 % POE)",
                  color=TEXT, loc="left", fontsize=11)  # fmt: off
     _style(ax)
     fig.tight_layout()

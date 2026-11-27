@@ -10,25 +10,27 @@ Inputs come from AEMO's ISP *Inputs, Assumptions and Scenarios Report* (IASR) wo
 demand, wind and solar traces. They are parsed into versioned tables committed in
 [`inputs/`](inputs/).
 
-**Status: v0.2.** Every element of the assessment is present, each in simplified form; the
-simplifications are listed below. v0.2 adds a whole-year water plan for Tasmania and Snowy,
-minimum running levels and ramping for coal and gas, and the groundwork for a gas balance built
-from GSOO data. See [docs/design_notes.md](docs/design_notes.md) for the reasons behind each
-choice, and [docs/data_needed.md](docs/data_needed.md) for the AEMO data still to be added.
+**Status: v0.3.** Every element of the assessment is present, each in simplified form; the
+simplifications are listed below. v0.3 moves to the final 2026 ISP workbook (v7.8), closes
+Eraring on 30 April 2029, runs 13 weather years instead of one, and replaces the illustrative
+gas cap with a southern winter gas balance built from the 2026 GSOO. See
+[docs/design_notes.md](docs/design_notes.md) for the reasons behind each choice, and
+[docs/data_needed.md](docs/data_needed.md) for the data sources.
 
-## Results (v0.2)
+## Results (v0.3)
 
 ![Expected unserved energy by region and scenario](docs/figures/eue_by_region.png)
 
 **Expected unserved energy, FY2028-29** (% of regional annual energy; standard 0.002 %). In
-brackets: outage draws, out of 10, with any unserved energy.
+brackets: how many of the 26 combinations of weather year and outage draw (13 × 2) have any
+unserved energy.
 
-| Region | Workbook coal, gas unconstrained | Workbook coal, tight winter gas | Early coal exit, gas unconstrained | Early coal exit, tight winter gas |
+| Region | Workbook coal, gas unconstrained | Workbook coal, winter gas limited (GSOO) | Early coal exit, gas unconstrained | Early coal exit, winter gas limited (GSOO) |
 |---|---|---|---|---|
-| QLD1 | 0 (0) | 0 (0) | 0.0005 (4) | **0.015** (10) |
-| NSW1 | 0 (0) | **0.021** (6) | **0.022** (10) | **2.25** (10) |
-| VIC1 | 0 (0) | **0.050** (10) | 0 (0) | **0.082** (10) |
-| SA1 | 0 (0) | **0.87** (10) | **0.079** (10) | **7.06** (10) |
+| QLD1 | 0 (0) | 0 (0) | 0.0000002 (1) | 0.000017 (1) |
+| NSW1 | 0 (0) | 0 (0) | **0.0057** (10) | **0.043** (17) |
+| VIC1 | 0 (0) | 0 (0) | 0 (0) | **0.0023** (2) |
+| SA1 | 0 (0) | 0 (0) | 0.0015 (4) | **0.28** (15) |
 | TAS1 | 0 (0) | 0 (0) | 0 (0) | 0 (0) |
 
 Bold: above the reliability standard. Full results: [`results/eue.csv`](results/eue.csv) and,
@@ -40,51 +42,80 @@ Planning on expected conditions instead is the next change (see Assumptions).
 
 ### Findings
 
-1. **Base case: within the standard.** No region has unserved energy in any outage draw.
-2. **Tight winter gas creates shortfalls in South Australia and Victoria in every draw.** With
-   southern gas-powered generation capped at 195 TJ/day from June to August, SA reaches 0.87 %
-   and VIC 0.05 %, and NSW exceeds the standard in six draws of ten. The gas limit drives the
-   result, not unlucky outages.
-3. **Early coal exit alone pushes NSW and SA above the standard.** Retiring Bayswater and Vales
-   Point B leaves NSW with only Mt Piper's 1.4 GW of coal. Gas fills most of the gap: southern
-   gas burn rises from 9 PJ to 168 PJ a year, and the peak winter day from about 700 to
-   1,650 TJ, above the top of the GSOO's range for southern gas-powered generation.
-4. **The two risks compound.** With both, unserved energy is far above the sum of the separate
-   effects: NSW 2.25 % against 0.021 % + 0.022 %, and SA 7.1 % against 0.87 % + 0.08 %. Early
-   coal retirement is workable here only if winter gas is available, and winter gas is exactly
-   what the GSOO flags as at risk. That interaction is what an integrated gas–electricity
-   assessment exists to catch.
+1. **Workbook coal: within the standard, with or without the GSOO gas limit.** No region has
+   unserved energy in any of the 52 runs per scenario. With the final workbook's fleet (Eraring
+   until April 2029, 5.9 GW more batteries than the draft), coal and storage carry winter and
+   gas-powered generation rarely runs: the busiest winter day burns 240 TJ on average across
+   runs, against at least 588 TJ/day available to power stations under the GSOO balance. The
+   unconstrained busiest day exceeds that in only 5 of 52 runs.
+2. **Early coal exit alone pushes NSW above the standard** (0.0057 %, unserved energy in 10 of
+   26 weather-year and outage-draw combinations); SA is just inside it. Gas fills most of the gap: southern gas burn
+   rises from 1.4 PJ to 130 PJ a year, and the busiest winter day to 1,290 TJ on average
+   (up to 1,690 TJ), above the top of the GSOO's 700–1,200 TJ/day range.
+3. **The two risks compound.** Gas that is not needed with the workbook's coal becomes
+   essential once coal exits early. With both, NSW reaches 0.043 % (7.6 times the early-exit
+   case alone), SA 0.28 % (190 times) and VIC moves above the standard. The gas limit on its own
+   does nothing; coal exit on its own is a modest breach; together they are a large one. That
+   interaction is what an integrated gas–electricity assessment exists to catch.
+4. **The weather year matters as much as the scenario.** In the combined case, NEM-wide
+   unserved energy ranges from 0 (2016, 2021, 2023 weather) to 240 GWh (2018 weather), averaged
+   over outage draws and POE levels. One weather year, as in v0.2, can miss or overstate the
+   risk.
 
-**What changed from v0.1.** Unserved energy is lower in every scenario: the whole-year water
-plan lets Tasmania and Snowy save water for winter, where v0.1 forced every store back to its
-starting level each week. The base case moves from marginally above the standard (one draw of
-ten) to within it. The compounding of coal and gas risk holds in both versions. On/off
-decisions for coal and gas barely change unserved energy: in a shortfall week everything runs
-flat out, so minimum levels do not bind (checked against exact per-unit decisions on a tight
-week).
+![Unserved energy in each run](docs/figures/unserved_by_sample.png)
 
-![Unserved energy in each outage sample](docs/figures/unserved_by_sample.png)
+**What changed from v0.2.** v0.2 used the draft workbook, one weather year (2018) and an
+illustrative cap of 195 TJ/day. v0.3's results are lower in every stressed case:
 
-10 % and 50 % POE demand give almost identical results. The 10 % POE trace differs from the
-50 % trace only at peaks (about 480 hours in NSW, by up to 1.1 GW, with the same annual energy),
-while the shortfalls here are multi-day energy shortages in winter.
+| Change | Effect |
+|---|---|
+| Final workbook (v7.8) | Eraring runs until 30 April 2029 (+2.9 GW in summer and autumn), +5.9 GW of batteries, cheaper gas. Gas-powered generation in the base case falls from 9 PJ to 1.4 PJ a year |
+| GSOO gas balance replaces the 195 TJ/day cap | 588–1,200 TJ/day for power stations, depending on the day, instead of 195; with workbook coal the limit rarely binds |
+| 13 weather years | 2018 was one of the harder years (the worst in the combined case); averaging across years lowers EUE |
 
-### Sense-check against AEMO publications
+The ordering of the scenarios, and the compounding of coal and gas risk, hold in both versions.
+
+10 % and 50 % POE demand give similar results. The 10 % POE trace differs from the 50 % trace
+only at peaks, with the same annual energy, while the shortfalls here are multi-day energy
+shortages in winter.
+
+### Comparison with the 2026 ESOO
+
+AEMO's 2026 ESOO, FY2028-29, committed and anticipated developments (from the ESOO results
+workbook, parsed into [`inputs/esoo-2026/unserved_energy.csv`](inputs/esoo-2026/unserved_energy.csv)):
+
+| Region | 2026 ESOO EUE (%) | This model, base case (%) |
+|---|---|---|
+| QLD1 | 0 | 0 |
+| NSW1 | 0.000002 | 0 |
+| VIC1 | 0.00022 | 0 |
+| SA1 | 0 | 0 |
+| TAS1 | 0.0000002 | 0 |
+
+Both find every region within the standard. The ESOO's small non-zero values (largest in
+Victoria, about a tenth of the standard) come from far more outage draws, long-duration
+outages, intra-regional network limits and no perfect foresight; with 26 runs per POE level
+this model cannot resolve risk that small. The model is consistent with the ESOO, not a
+replication of it.
+
+### Sense-check against the 2026 GSOO
 
 | Quantity | This model | Published | Source |
 |---|---|---|---|
-| Victorian reliability, FY2028-29, committed and anticipated fleet | Within the standard (0 % EUE) | No shortfall against the standard until 2030-31 (2025 ESOO, as summarised by the Victorian Auditor-General's Office) | [VAGO](https://audit.vic.gov.au/report/managing-transition-renewable-energy?section=) |
-| Peak winter-day gas for southern gas-powered generation (base case) | About 700 TJ/day averaged over outage draws (390 TJ/day with no outages) | 700 to 1,200 TJ/day | [2025 GSOO webinar](https://www.aemo.com.au/-/media/files/gas/national_planning_and_forecasting/gsoo/2025/2025-gsoo-webinar-presentation.pdf) |
-| Timing of southern peak-day gas risk | Tight case modelled in winter 2028 and June 2029 | Peak-day shortfall risk from 2029 (2026 GSOO; 2028 in the 2025 GSOO) | [2026 GSOO](https://www.aemo.com.au/-/media/files/gas/national_planning_and_forecasting/gsoo/2026/2026-gas-statement-of-opportunities.pdf) |
+| Gas available to southern power stations, winter 2029 1-in-2 peak day | About 590 TJ/day (the balance's minimum, cold days) | Derived from GSOO production, northern supply, storage and non-power demand | [`config/gas_balance.yaml`](config/gas_balance.yaml) |
+| Busiest winter day, southern gas-powered generation, workbook coal | 240 TJ/day (mean across runs; up to 660) | 700 to 1,200 TJ/day historically (2025 GSOO) | [2025 GSOO webinar](https://www.aemo.com.au/-/media/files/gas/national_planning_and_forecasting/gsoo/2025/2025-gsoo-webinar-presentation.pdf) |
+| Timing of southern peak-day gas risk | Winter 2028 and June 2029 modelled | Peak-day shortfall risk from 2029 | [2026 GSOO](https://www.aemo.com.au/-/media/files/gas/national_planning_and_forecasting/gsoo/2026/2026-gas-statement-of-opportunities.pdf) |
 
-With outages, the base case's winter gas peak sits at the bottom of the GSOO range; without
-outages it is well below. Both fit a model whose dams plan with perfect foresight. A
-region-by-region comparison with the ESOO's published unserved energy figures needs the ESOO
-data workbook, which AEMO's site does not serve to automated downloads.
+**The model under-runs gas.** Its base case burns far less gas for power than the NEM does
+today. Dispatch is by short-run cost alone, with perfect foresight and no network limits inside
+regions, so coal, storage and hydro displace gas wherever they can. In practice gas runs for
+system strength, network support, contracts and forecast uncertainty. This is the main reason
+the workbook-coal gas limit does not bind here; a model that ran gas more would find the GSOO
+limit tighter.
 
 ## Method
 
-| Element | Representation (v0.2) |
+| Element | Representation (v0.3) |
 |---|---|
 | Regions | QLD1, NSW1, VIC1, SA1, TAS1, one bus each |
 | Interconnectors | Seven inter-regional flow paths with seasonal forward and reverse limits (notional transfer limits plus uplifts from committed network projects); no losses |
@@ -126,9 +157,10 @@ reliability.
 * **Hydro storage assumptions:** Snowy's annual energy, its storage size, and the 50 %
   starting level and 20 % drought floor for both schemes are assumptions (the workbook gives
   Tasmanian inflows but not storage sizes or operating rules).
-* **Ten outage samples** per POE level. EUE is a tail statistic, so the sampling error on small
-  values is large. Scenario comparisons are more reliable than absolute levels, because every
-  scenario uses the same outage draws.
+* **Gas under-runs.** Dispatch by short-run cost alone leaves gas-powered generation far below
+  what the NEM burns today (see the GSOO sense-check), so gas limits bite less than they would.
+  Scenario comparisons are more reliable than absolute levels, because every scenario uses the
+  same weather years and outage draws.
 * **Gas balance from charts and interpolation:** several GSOO figures are read from charts
   (about ±25 TJ/day) and 2028–29 demand is interpolated between the GSOO's 2026 and 2030
   values. Storage running down over a winter, and 1-in-20 peak gas demand, are not modelled.
@@ -145,7 +177,7 @@ uv sync --package nemmodel --extra dev
 ```
 
 ```bash
-uv run nemmodel fetch-traces
+uv run nemmodel fetch-weather --first 2011 --last 2023
 ```
 
 ```bash
@@ -156,12 +188,20 @@ uv run nemmodel study
 uv run nemmodel figures
 ```
 
-`nemmodel study` runs 80 one-year dispatches across three processes, which takes about 1.5
-hours (each process needs up to about 3 GB of memory). The seed is fixed in [`config/assumptions.yaml`](config/assumptions.yaml), so reruns give
-the same results. To rebuild the input tables from a workbook:
+The processed weather traces are committed, so `fetch-weather` is only needed to rebuild them
+(it downloads about 1.7 GB per weather year and keeps about 2 MB).
+
+`nemmodel study` runs 208 one-year dispatches (4 scenarios × 2 POE levels × 13 weather years ×
+2 outage draws) across three processes, which takes about 5 hours (each process needs up to
+about 3 GB of memory). Each finished run is saved to `results/runs_partial.jsonl`, so an
+interrupted study resumes where it stopped; `--max-minutes 100` stops starting new runs after
+100 minutes, for machines that limit how long a job may run. Saved runs carry a fingerprint of
+the configuration and inputs, and runs from a different setup are not reused. The seed is fixed
+in [`config/assumptions.yaml`](config/assumptions.yaml), so reruns give the same results. To
+rebuild the input tables from a workbook:
 
 ```bash
-uv run nemmodel build-inputs path/to/workbook.xlsx
+uv run nemmodel build-inputs path/to/workbook.xlsm --label final-2026-isp
 ```
 
 Tests use synthetic data and the committed inputs; no download is needed:
@@ -178,6 +218,9 @@ inputs/<version>/         versioned unit and interconnector tables, with a manif
 src/nemmodel/
   inputs.py               IASR workbook -> unit and interconnector tables
   traces.py               ISP traces -> hourly demand and wind/solar capacity factors
+  weather.py              download and reduce weather reference years
+  gas.py                  southern winter gas balance (2026 GSOO)
+  benchmarks.py           2026 ESOO unserved energy for comparison
   outages.py              Monte Carlo forced outages
   network.py              PyPSA network, windowed solve, gas constraint
   study.py                2 x 2 scenario study and EUE
@@ -199,5 +242,5 @@ long-term investment.
 
 Inputs are derived from AEMO's IASR workbook and ISP traces, © AEMO, used under
 [AEMO's copyright permissions](https://www.aemo.com.au/privacy-and-legal-notices/copyright-permissions),
-via the openISP mirror. Processed input tables are committed; raw traces are downloaded by
-`nemmodel fetch-traces` and are not committed.
+via the openISP mirror, and from AEMO's 2026 ESOO and 2026 GSOO. Processed input tables are
+committed; raw traces are downloaded by `nemmodel fetch-weather` and are not committed.

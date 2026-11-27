@@ -119,12 +119,10 @@ standard. The Interim Reliability Measure (0.0006 %) is shown for reference.
 ## Gas coupling
 
 A daily cap on gas burnt by gas-powered generation in NSW, VIC, SA and TAS (the GSOO southern
-system) on every day in June, July and August. Heat rates turn MWh into TJ. The tight-winter cap
-is half the most the unconstrained model burns on a winter day (workbook fleet, 10 % POE, no
-outages): 587 TJ/day against 1,174 TJ/day. The unconstrained peak sits at the top of the 2025
-GSOO's 700–1,200 TJ/day range for southern GPG demand, so the reference is plausible. The cap
-itself is an illustrative stress case; v0.2 should derive it from southern supply capacity less
-non-GPG peak-day demand, using the GSOO facility data in the workbook.
+system) on every day in June, July and August. Heat rates turn MWh into TJ. v0.1 and v0.2 used
+an illustrative cap (half the unconstrained model's busiest winter day, 195 TJ/day in v0.2);
+v0.3 derives it from the 2026 GSOO, below. The illustrative mode remains
+(`gas.tight_case: illustrative`).
 
 ## Gas balance (from the 2026 GSOO)
 
@@ -141,7 +139,18 @@ nothing; they are counted, and the shortfall to other gas users is reported, not
 Not yet represented: storage running down over a winter (Iona holds about 24 PJ, less than 90
 days at its 570 TJ/day withdrawal rate).
 
+## Results in v0.3 and what they say about the model
+
+With the final workbook fleet, the base case burns only 1.4 PJ of southern gas for power in a
+year and the GSOO limit almost never binds. The real NEM burns far more: gas runs for system
+strength, network support and contracts, none of which a short-run-cost dispatch represents.
+So the gas limit is understated in the workbook-coal cases; the early-exit cases, where gas is
+needed for energy, are the informative ones. A minimum gas running requirement by region (for
+example from AEMO's system strength requirements) would be the natural next refinement.
+
 ## Parallel runs
 
 The study uses a process pool started with "spawn". The parent process has already run HiGHS
-for the calibration solve, and forked children deadlocked.
+for the calibration solve, and forked children deadlocked. Each finished run is appended to
+`results/runs_partial.jsonl` with a fingerprint of the configuration and inputs, so a study
+stopped by a time limit (`--max-minutes`) or a crash resumes without repeating runs.
