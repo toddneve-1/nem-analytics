@@ -1,0 +1,8 @@
+flow_path,from,to,fwd_summer,fwd_winter,rev_summer,rev_winter,uplift_note
+NNSW-SQ,NSW1,QLD1,950.0,950.0,1450.0,1450.0,
+NNSW-SQ (Terranora),NSW1,QLD1,50.0,50.0,150.0,200.0,
+SNSW-CSA,NSW1,SA1,800.0,800.0,800.0,800.0,fwd +650 (committed projects); rev +650 (committed projects); 
+WNV-SNSW,VIC1,NSW1,1000.0,1000.0,400.0,400.0,
+TAS-SEV,TAS1,VIC1,594.0,594.0,478.0,478.0,
+WNV-SESA,VIC1,SA1,650.0,650.0,650.0,650.0,
+WNV-CSA (Murraylink),VIC1,SA1,220.0,220.0,200.0,200.0,

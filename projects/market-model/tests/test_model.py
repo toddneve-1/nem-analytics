@@ -130,13 +130,14 @@ def test_gas_cap_binds(cfg, tiny):
 def test_early_coal_case(cfg, committed_units):
     early = fleet(committed_units, "early", cfg)
     gone = set(committed_units["station"]) - set(early["station"])
-    assert gone == {"Gladstone", "Callide B", "Bayswater", "Vales Point B"}
+    assert gone == {"Eraring", "Gladstone", "Callide B", "Bayswater", "Vales Point B"}
 
 
 def test_committed_inputs(committed_units):
     u = committed_units
     assert u["group"].notna().all()
-    assert not u["station"].isin(["Eraring", "Yallourn W"]).any()  # closed before FY2028-29
+    assert not u["station"].isin(["Yallourn W"]).any()  # closes in 2028, before FY2028-29
+    assert u["station"].eq("Eraring").any()  # closes 30 April 2029, inside FY2028-29
     thermal = u[u["group"].isin(["coal", "ccgt", "ocgt", "recip", "liquid"])]
     assert (thermal["srmc"] > 0).all()
     assert (u.loc[u["group"].isin(["battery", "pumped_hydro"]), "storage_mwh"] > 0).all()
@@ -295,3 +296,15 @@ def test_gas_cap_varies_by_day(cfg, tiny):
     solve(n, cfg, GasConstraint(["NSW1", "VIC1"], [7], pd.Series([72.0, 24.0], index=days)))
     burn = daily_southern_gas_tj(n, ["NSW1", "VIC1"])
     assert burn.tolist() == pytest.approx([72.0, 24.0], rel=1e-6)
+
+
+def test_closure_date_switches_unit_off(cfg, tiny):
+    import copy
+
+    cfg = copy.deepcopy(cfg)
+    cfg["dispatch"]["window_hours"] = 48
+    cfg["closure_dates"] = {"COAL": "2028-07-02"}
+    n = build_network(tiny["units"], tiny["ics"], tiny["demand"], tiny["cf"], cfg)
+    pmax = n.get_switchable_as_dense("Generator", "p_max_pu")["NSW1 COAL coal"]
+    assert (pmax.loc[:"2028-07-01 23:00"] == 1).all()
+    assert (pmax.loc["2028-07-02":] == 0).all()

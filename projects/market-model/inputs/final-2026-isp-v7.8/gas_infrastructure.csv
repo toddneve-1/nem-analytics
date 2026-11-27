@@ -1,0 +1,98 @@
+kind,name,status,location,capacity_text,storage_pj,source,capacity_tj_d,southern
+processing,Wallumbilla Gas Plant,Online,QLD,36,,Data shown from 2026 GSOO,36.0,False
+processing,Orbost Gas Plant,Online,VIC,68,,Data shown from 2026 GSOO,68.0,True
+processing,Condabri Central Gas Plant,Online,QLD,176.286,,Data shown from 2026 GSOO,176.286,False
+processing,Condabri North Gas Plant,Online,QLD,182.16,,Data shown from 2026 GSOO,182.16,False
+processing,Condabri South Gas Plant,Online,QLD,177.81,,Data shown from 2026 GSOO,177.81,False
+processing,Orana Gas Plant,Online,QLD,172.7786,,Data shown from 2026 GSOO,172.7786,False
+processing,Peat Gas Plant,Online,QLD,10.4503,,Data shown from 2026 GSOO,10.4503,False
+processing,Spring Gully Gas Plant,Online,QLD,56.2452,,Data shown from 2026 GSOO,56.2452,False
+processing,Strathblane Gas Plant,Online,QLD,78,,Data shown from 2026 GSOO,78.0,False
+processing,Talinga Gas Plant,Online,QLD,97.9957,,Data shown from 2026 GSOO,97.9957,False
+processing,Taloona Gas Plant,Online,QLD,57.6,,Data shown from 2026 GSOO,57.6,False
+processing,Eurombah Creek Gas Plant,Online,QLD,189.05,,Data shown from 2026 GSOO,189.05,False
+processing,Daandine Central Gas Processing Facility,Existing,QLD,74.34,,Data shown from 2026 GSOO,74.34,False
+processing,Moranbah Gas Processing Facility,Online,QLD,68,,Data shown from 2026 GSOO,68.0,False
+processing,Combabula Gas Plant,Online,QLD,297.75,,Data shown from 2026 GSOO,297.75,False
+processing,Reedy Creek Gas Plant,Online,QLD,199.225,,Data shown from 2026 GSOO,199.225,False
+processing,Otway Gas Plant,Online,VIC,205,,Data shown from 2026 GSOO,205.0,True
+processing,Athena Gas Plant,Online,VIC,70,,Data shown from 2026 GSOO,70.0,True
+processing,Rolleston Gas Plant,Offline,QLD,15,,Data shown from 2026 GSOO,15.0,False
+processing,Yellowbank Gas Plant,Online,QLD,30,,Data shown from 2026 GSOO,30.0,False
+processing,Kogan North Gas Plant,Online,QLD,13,,Data shown from 2026 GSOO,13.0,False
+processing,Longford Gas Plant,Online,VIC,720,,Data shown from 2026 GSOO,720.0,True
+processing,Lang Lang Gas Plant,Online,VIC,67,,Data shown from 2026 GSOO,67.0,True
+processing,Kenya Gas Plant,Online,QLD,184,,Data shown from 2026 GSOO,184.0,False
+processing,Bellevue Gas Plant,Online,QLD,254,,Data shown from 2026 GSOO,254.0,False
+processing,Jordan Gas Plant,Online,QLD,507,,Data shown from 2026 GSOO,507.0,False
+processing,Ruby Jo Gas Plant,Online,QLD,507,,Data shown from 2026 GSOO,507.0,False
+processing,Woleebee Creek Gas Plant,Online,QLD,761,,Data shown from 2026 GSOO,761.0,False
+processing,Scotia Gas Plant,Online,QLD,110,,Data shown from 2026 GSOO,110.0,False
+processing,Moomba Gas Plant,Online,SA,290,,Data shown from 2026 GSOO,290.0,True
+processing,Fairview Gas Facilities,Online,QLD,580,,Data shown from 2026 GSOO,580.0,False
+processing,Roma Gas Facilities,Online,QLD,280,,Data shown from 2026 GSOO,280.0,False
+processing,Arcadia Gas Facilities,Online,QLD,105,,Data shown from 2026 GSOO,105.0,False
+processing,Tipton Central Gas Processing Facility,Existing,QLD,39,,Data shown from 2026 GSOO,39.0,False
+processing,Girrahween Field Compression Station,Under construction,QLD,121.3,,Data shown from 2026 GSOO,121.3,False
+processing,Lynwood Field Compression Station,Proposed,QLD,121.3,,Data shown from 2026 GSOO,121.3,False
+processing,Atlas Gas Processing Facility,Online,QLD,48,,Data shown from 2026 GSOO,48.0,False
+processing,Roma North Gas Processing Facility,Existing,QLD,24,,Data shown from 2026 GSOO,24.0,False
+processing,Narrabri Gas Plant,Existing,NSW,Commercial in confidence,,Data shown from 2026 GSOO,,True
+processing,Windibri Central Processing Plant,Existing,QLD,147,,Data shown from 2026 GSOO,147.0,False
+processing,Kincora Processing Facility,Online,"Surat, Qld",15,,Data shown from 2026 GSOO,15.0,False
+processing,Golden Beach Energy Storage Project,Proposed,VIC,375,,Data shown from 2026 GSOO,375.0,True
+processing,Atlas Compression Facility,Pre Commissioning,QLD,57,,Data shown from 2026 GSOO,57.0,False
+processing,Ballera Gas Plant,Online,QLD,nan,,Data shown from 2026 GSOO,,False
+processing,Meridian SeamGas Facility,Online,QLD,57,,Data shown from 2026 GSOO,57.0,False
+processing,Mimas - Roma North Facility,Under Construction,QLD,28.5,,Data shown from 2026 GSOO,28.5,False
+processing,LNG Regasification Terminal - Port Kembla Energy Terminal,Proposed,"Port Kembla, NSW",500,,Data shown from 2026 GSOO,500.0,True
+processing,LNG Regasification Terminal - Vopak Victoria Energy Terminal,Proposed,"Offshore Avalon, Port Phillip Bay, Victoria",Up to 778,,Data shown from 2026 GSOO,778.0,True
+processing,LNG Regasification Terminal - Viva Energy Gas Terminal,Proposed,"Geelong Refinery, Geelong, VIC",750,,Data shown from 2026 GSOO,750.0,True
+processing,LNG Regasification Terminal - Outer Harbor LNG Project,Proposed,"Outer Harbour, Adelaide",405,,Data shown from 2026 GSOO,405.0,False
+storage,Newcastle Gas Storage Facility,Online,Tomago NSW,120,1.6,Data shown from 2026 GSOO,120.0,True
+storage,Silver Springs Gas Storage,Online,Surat QLD,10,45.0,Data shown from 2026 GSOO,10.0,False
+storage,Dandenong LNG Storage,Online,VIC,87,0.68,Data shown from 2026 GSOO,87.0,True
+storage,Iona Underground Gas Storage,Online,"Port Campbell, Victoria",570,24.4,Data shown from 2026 GSOO,570.0,True
+storage,Heytesbury Underground Gas Storage Project (HUGS),Execute Project Phase,"Port Campbell, Victoria",45,3.0,Data shown from 2026 GSOO,45.0,True
+storage,Roma Underground Storage,Online,QLD,75,54.0,Data shown from 2026 GSOO,75.0,False
+storage,Moomba Underground Gas Storage,Online,SA,10,70.0,Data shown from 2026 GSOO,10.0,True
+storage,Golden Beach,Proposed,"Gas Plant 10KM SE of Longford Gas Plant in Victoria. Storage field crest 3 km offshore in Victorian waters, 23 km south and east of the Longford Gas Plant.",375,42.0,Data shown from 2026 GSOO,375.0,True
+storage,Kurri Kurri Lateral Pipeline (KKLP),Online,"Newcastle, New South Wales",60,0.072,Data shown from 2026 GSOO,60.0,True
+pipeline,Braemar Gas Pipeline,Online,QLD,80,,Data shown from 2026 GSOO,80.0,False
+pipeline,Berwyndale Wallumbilla Pipeline (“BWP”),Online,QLD,164 West 276 East,,Data shown from 2026 GSOO,164.0,False
+pipeline,Carpentaria Gas Pipeline (“CGP”),Online,QLD,119 North                         65 South,,Data shown from 2026 GSOO,119.0,False
+pipeline,Moomba to Sydney Pipeline System (“MSP”),Online,SA / QLD / NSW,565 South 195 North,,Data shown from 2026 GSOO,565.0,True
+pipeline,Victorian Northern Interconnect (“VNI”),Online,VIC/NSW,195 South 223 North,,Data shown from 2026 GSOO,195.0,True
+pipeline,Roma - Brisbane Pipeline (“RBP”),Online,QLD,167 East 125 West,,Data shown from 2026 GSOO,167.0,False
+pipeline,South West Pipeline (“SWP”),Online,VIC,500 East 340 West,,Data shown from 2026 GSOO,500.0,True
+pipeline,South West Queensland Pipeline (“SWQP”),Online,QLD/SA,365 East 512 West,,Data shown from 2026 GSOO,365.0,True
+pipeline,Wallumbilla Gladstone Pipeline (“WGP”),Online,QLD,1588,,Data shown from 2026 GSOO,1588.0,False
+pipeline,Longford to Melbourne Gas Pipeline (“LMP”),Online,VIC,1114 forward 304 reverse,,Data shown from 2026 GSOO,1114.0,True
+pipeline,South East Australia Gas (“SEA Gas”) Mortlake Pipeline,Online,VIC,150 forward 50 reverse,,Data shown from 2026 GSOO,150.0,True
+pipeline,South East Australia Gas (“SEA Gas”) Port Campbell – Adelaide (“PCA”) Pipeline,Online,SA / VIC,250,,Data shown from 2026 GSOO,250.0,True
+pipeline,APLNG Pipeline,Online,QLD,1630,,Data shown from 2026 GSOO,1630.0,False
+pipeline,Braemar 2 Pipeline,Online,QLD,219,,Data shown from 2026 GSOO,219.0,False
+pipeline,Moomba to Adelaide Pipeline System (“MAPS”),Online,SA,249 South 85 North,,Data shown from 2026 GSOO,249.0,True
+pipeline,"Comet Ridge to Wallumbilla Pipeline (""CRWP"")",Complete and operational.,QLD,950 North 175 South,,Data shown from 2026 GSOO,950.0,False
+pipeline,GLNG Pipeline,Online,QLD,1430,,Data shown from 2026 GSOO,1430.0,False
+pipeline,Atlas Gas Pipeline,Commissioning,QLD,Commercial in confidence,,Data shown from 2026 GSOO,,False
+pipeline,Darling Downs Pipeline (“DDP”),Online,QLD,DDP90 Southern 155 TJ/d DDP133 Western 502 TJ/d DDP133 Eastern 160 TJ/d DDP134 Western 365 TJ/d DDP134 Eastern 268 TJ/d,,Data shown from 2026 GSOO,90.0,False
+pipeline,Eastern Gas Pipeline (“EGP”),Online,VIC / NSW,350 (Summer) 362 (Winter),,Data shown from 2026 GSOO,350.0,True
+pipeline,Northern Gas Pipeline (“NGP”),Online,NT / QLD,106,,Data shown from 2026 GSOO,106.0,False
+pipeline,Queensland Gas Pipeline (“QGP”),Online,QLD,145 TJ/d North 37.2 TJ/d South,,Data shown from 2026 GSOO,145.0,False
+pipeline,North Queensland Gas Pipeline (“NQGP”),Online,QLD,108,,Data shown from 2026 GSOO,108.0,False
+pipeline,Tasmanian Gas Pipeline (“TGP”),Online,VIC / TAS,129,,Data shown from 2026 GSOO,129.0,True
+pipeline,Hunter Gas Pipeline,Proposed,NSW,TBD but planning for up to 200 TJ/d,,Data shown from 2026 GSOO,200.0,True
+pipeline,Arrow Bowen Pipeline,Proposed,QLD,Not available at this stage,,Data shown from 2026 GSOO,,False
+pipeline,Amadeus Gas Pipeline,Online,NT,166 North 50 South,,Data shown from 2026 GSOO,166.0,False
+pipeline,Bonaparte Gas Pipeline,Online,NT,108,,Data shown from 2026 GSOO,108.0,False
+pipeline,Tanami Gas Pipeline,Online,NT,13,,Data shown from 2026 GSOO,13.0,False
+pipeline,Reedy Creek Wallumbilla Pipeline,Online,QLD,300 North 520 South,,Data shown from 2026 GSOO,300.0,False
+pipeline,Pakenham To Lang Lang Pipeline,Online,VIC,67,,Data shown from 2026 GSOO,67.0,True
+pipeline,South East Pipeline System (“SEPS”),Online,SA,16,,Data shown from 2026 GSOO,16.0,True
+pipeline,Gas Pipeline Victoria (“GPV”),Online,VIC,nan,,Data shown from 2026 GSOO,,True
+pipeline,Vichub,Online,VIC,150,,Data shown from 2026 GSOO,150.0,True
+pipeline,Colongra Lateral Pipeline,Online,NSW,43,,Data shown from 2026 GSOO,43.0,True
+pipeline,Port Campbell to Iona Pipeline,Online,VIC,400,,Data shown from 2026 GSOO,400.0,True
+pipeline,EO4,Online,QLD,148 receipt from Windibri             190 receipt from Kenya,,Data shown from 2026 GSOO,148.0,False
+pipeline,Kurri Kurri Lateral Pipeline (KKLP),Online,NSW,60,,Data shown from 2026 GSOO,60.0,True

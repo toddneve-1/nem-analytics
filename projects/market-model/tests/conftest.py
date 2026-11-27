@@ -19,7 +19,7 @@ def cfg() -> dict:
 
 @pytest.fixture(scope="session")
 def committed_units() -> pd.DataFrame:
-    return pd.read_csv(ROOT / "inputs" / "draft-2026-isp-v7.5" / "units.csv")
+    return pd.read_csv(ROOT / "inputs" / "final-2026-isp-v7.8" / "units.csv")
 
 
 def unit(uid: str, region: str, group: str, cap: float, srmc: float, **kw) -> dict:

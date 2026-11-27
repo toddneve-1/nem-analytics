@@ -25,13 +25,17 @@ def fetch_traces() -> None:
 
 @app.command()
 def build_inputs(
-    workbook: Path, year: int = 2029, scenario: str = "Step Change", source_url: str = WORKBOOK_URL
+    workbook: Path,
+    label: str = typer.Option(..., help='Folder name under inputs/, e.g. "final-2026-isp"'),
+    year: int = 2029,
+    scenario: str = "Step Change",
+    source_url: str = WORKBOOK_URL,
 ) -> None:
-    """Parse an IASR workbook into versioned input tables under ``inputs/``."""
+    """Parse an IASR workbook into versioned input tables under ``inputs/<label>-v<version>``."""
     from isp_workbook_parser import Parser
 
     version = Parser(str(workbook)).workbook_version
-    out = ROOT / "inputs" / f"draft-2026-isp-v{version}"
+    out = ROOT / "inputs" / f"{label}-v{version}"
     m = write_inputs(workbook, out, ModelYear(year), scenario, source_url)
     typer.echo(f"wrote {m['units']} units to {out}")
 

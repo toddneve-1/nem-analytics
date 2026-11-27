@@ -134,6 +134,9 @@ def build_network(
     )
 
     mw = unit_ratings(units, idx, cfg)
+    for station, date in cfg.get("closure_dates", {}).items():
+        closing = units.loc[units["station"] == station, "unit_id"]
+        mw.loc[idx >= pd.Timestamp(date), closing] = 0.0  # closed from this date onwards
     if available is not None:
         mw = mw * available.set_axis(idx).reindex(columns=mw.columns, fill_value=1.0)
 

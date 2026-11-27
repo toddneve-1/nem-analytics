@@ -1,0 +1,78 @@
+{
+  "workbook": {
+    "url": "AEMO 2026 ISP Inputs and Assumptions workbook (25 June 2026), downloaded by hand from aemo.com.au",
+    "sha256": "4a9c04b3ce099a3c8d1866953a15fece4650959a88024d7e8be64c0eee52b55c",
+    "version": "7.8"
+  },
+  "financial_year": "2028-29",
+  "scenario": "Step Change",
+  "fleet": "existing, committed and anticipated (ESOO definition)",
+  "units": 610,
+  "capacity_mw_by_region_group": {
+    "NSW1": {
+      "battery": 6218.4,
+      "biomass": 36.0,
+      "ccgt": 420.0,
+      "coal": 8345.0,
+      "hydro": 2285.0,
+      "liquid": 20.6,
+      "ocgt": 2668.7,
+      "pumped_hydro": 247.0,
+      "recip": 0.0,
+      "solar": 6803.9,
+      "wind": 3529.8
+    },
+    "QLD1": {
+      "battery": 3897.6,
+      "biomass": 32.0,
+      "ccgt": 1597.9,
+      "coal": 8130.0,
+      "hydro": 156.4,
+      "liquid": 423.5,
+      "ocgt": 1546.0,
+      "pumped_hydro": 820.0,
+      "recip": 0.0,
+      "solar": 6645.6,
+      "wind": 3138.3
+    },
+    "SA1": {
+      "battery": 2744.4,
+      "biomass": 0.0,
+      "ccgt": 529.0,
+      "coal": 0.0,
+      "hydro": 0.0,
+      "liquid": 123.0,
+      "ocgt": 1119.4,
+      "pumped_hydro": 0.0,
+      "recip": 210.0,
+      "solar": 969.7,
+      "wind": 2752.2
+    },
+    "TAS1": {
+      "battery": 0.0,
+      "biomass": 0.0,
+      "ccgt": 208.0,
+      "coal": 0.0,
+      "hydro": 2176.7,
+      "liquid": 0.0,
+      "ocgt": 178.0,
+      "pumped_hydro": 0.0,
+      "recip": 0.0,
+      "solar": 360.8,
+      "wind": 582.6
+    },
+    "VIC1": {
+      "battery": 5408.4,
+      "biomass": 0.0,
+      "ccgt": 500.0,
+      "coal": 3370.0,
+      "hydro": 2267.2,
+      "liquid": 0.0,
+      "ocgt": 1900.0,
+      "pumped_hydro": 0.0,
+      "recip": 0.0,
+      "solar": 2530.3,
+      "wind": 6007.3
+    }
+  }
+}

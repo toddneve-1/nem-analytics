@@ -3,7 +3,7 @@
 
 financial_year_end: 2029          # FY2028-29 (1 July 2028 to 30 June 2029), AEST
 scenario: Step Change             # IASR scenario for demand, fuel prices and traces
-inputs: inputs/draft-2026-isp-v7.5
+inputs: inputs/final-2026-isp-v7.8
 trace_reference_year: 2018        # one weather year (2024 ISP traces)
 
 reliability:
@@ -69,7 +69,14 @@ gas:
   # v0.1; to be calibrated against the GSOO peak-day supply-demand balance.
   tight_fraction: 0.5
 
+# Closures inside the study year. The workbook gives closure years only; a unit closing in
+# calendar 2029 counts as in service, so a date here switches it off from that day onwards.
+closure_dates:
+  Eraring: "2029-04-30"           # 2026 GSOO, p. 4: retirement delayed to 30 April 2029
+  # Gladstone also closes in 2029; no date published in the sources used, so it runs all year.
+
 coal_timing:
   # Early-retirement case: units the workbook closes by the end of this calendar year are
-  # retired before the study year (Gladstone, Callide B, Bayswater, Vales Point B).
+  # retired before the study year (Eraring, Gladstone, Callide B, Bayswater, Vales Point B):
+  # Eraring is not extended and the next four close early.
   early_closure_by: 2033
