@@ -312,3 +312,30 @@ def test_closure_date_switches_unit_off(cfg, tiny):
     pmax = n.get_switchable_as_dense("Generator", "p_max_pu")["NSW1 COAL coal"]
     assert (pmax.loc[:"2028-07-01 23:00"] == 1).all()
     assert (pmax.loc["2028-07-02":] == 0).all()
+
+
+def test_esoo_parser_keeps_columns_aligned(tmp_path):
+    import openpyxl
+
+    from nemmodel.benchmarks import esoo_unserved_energy
+
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = "Unserved Energy"
+    ws.append(["Unserved Energy (%) by reliability assessment"])
+    ws.append(["Committed and anticipated developments"])
+    ws.append(["Financial Year", "New South Wales", "Queensland", "South Australia", "Tasmania",
+               "Victoria", "Reliability Standard"])  # fmt: off
+    ws.append(["2028-29", 2e-8, 0, 0, 0, 2.2e-6, 2e-5])
+    ws.append(["Sensitivity with blanks"])
+    ws.append(["Financial Year", "New South Wales", "Queensland", "South Australia", "Tasmania",
+               "Victoria", "Reliability Standard"])  # fmt: off
+    ws.append(["2030-31", None, None, 1e-5, None, None, 2e-5])
+    wb.save(tmp_path / "esoo.xlsx")
+    t = esoo_unserved_energy(tmp_path / "esoo.xlsx").set_index(["assessment", "region"])
+    assert t.loc[("Committed and anticipated developments", "VIC1"), "eue_pct"] == pytest.approx(
+        2.2e-4
+    )
+    blanks = t.loc["Sensitivity with blanks"]
+    assert list(blanks.index) == ["SA1"]  # the blank cells do not shift values across columns
+    assert blanks.loc["SA1", "eue_pct"] == pytest.approx(1e-3)
