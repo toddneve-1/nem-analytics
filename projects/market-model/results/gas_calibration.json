@@ -1,5 +1,6 @@
 {
-  "reference_max_winter_day_tj": 1173.5599610198199,
+  "method": "illustrative",
+  "reference_max_winter_day_tj": 391.4050176537446,
   "tight_fraction": 0.5,
-  "tight_cap_tj_per_day": 586.7799805099099
+  "tight_cap_tj_per_day": 195.7025088268723
 }
