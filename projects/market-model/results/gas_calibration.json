@@ -1,6 +1,84 @@
 {
-  "method": "illustrative",
-  "reference_max_winter_day_tj": 390.4861248419958,
-  "tight_fraction": 0.5,
-  "tight_cap_tj_per_day": 195.2430624209979
+  "method": "gsoo",
+  "source": "AEMO 2026 GSOO (March 2026). Production: Figure 3, p. 8 (June peak production capacity, existing, committed and anticipated; chart). Northern supply and storage: Figure 35, p. 68 (cumulative southern supply capacity lines; chart). Peak-day demand excluding gas-powered generation: Table 6, p. 38 (1-in-2 winter, NSW + SA + TAS + VIC; 2026 and 2030 values, interpolated linearly to 2028 and 2029). Average winter-day demand: Table 22, p. 109 (2027 monthly residential, commercial and industrial demand, June-August, southern regions: 105.9 PJ over 92 days = 1,151 TJ/day, 0.757 of the interpolated 2027 1-in-2 peak of 1,520 TJ/day), with the same ratio applied to the 2028 and 2029 peaks.",
+  "by_weather_year": {
+    "2011": {
+      "allowance_tj_per_day_min": 588.0,
+      "allowance_tj_per_day_mean": 1045.1423803799876,
+      "days_other_demand_exceeds_supply": 0,
+      "other_users_shortfall_tj": -0.0
+    },
+    "2012": {
+      "allowance_tj_per_day_min": 588.0,
+      "allowance_tj_per_day_mean": 1051.9580395295638,
+      "days_other_demand_exceeds_supply": 0,
+      "other_users_shortfall_tj": -0.0
+    },
+    "2013": {
+      "allowance_tj_per_day_min": 588.0,
+      "allowance_tj_per_day_mean": 1053.0950703747696,
+      "days_other_demand_exceeds_supply": 0,
+      "other_users_shortfall_tj": -0.0
+    },
+    "2014": {
+      "allowance_tj_per_day_min": 588.0,
+      "allowance_tj_per_day_mean": 1062.6482412329094,
+      "days_other_demand_exceeds_supply": 0,
+      "other_users_shortfall_tj": -0.0
+    },
+    "2015": {
+      "allowance_tj_per_day_min": 588.0,
+      "allowance_tj_per_day_mean": 1050.1135547786093,
+      "days_other_demand_exceeds_supply": 0,
+      "other_users_shortfall_tj": -0.0
+    },
+    "2016": {
+      "allowance_tj_per_day_min": 588.0,
+      "allowance_tj_per_day_mean": 1046.3544832210462,
+      "days_other_demand_exceeds_supply": 0,
+      "other_users_shortfall_tj": -0.0
+    },
+    "2017": {
+      "allowance_tj_per_day_min": 588.0,
+      "allowance_tj_per_day_mean": 1046.2143358610099,
+      "days_other_demand_exceeds_supply": 0,
+      "other_users_shortfall_tj": -0.0
+    },
+    "2018": {
+      "allowance_tj_per_day_min": 588.0,
+      "allowance_tj_per_day_mean": 1060.2850277844593,
+      "days_other_demand_exceeds_supply": 0,
+      "other_users_shortfall_tj": -0.0
+    },
+    "2019": {
+      "allowance_tj_per_day_min": 588.0,
+      "allowance_tj_per_day_mean": 1053.8105928558061,
+      "days_other_demand_exceeds_supply": 0,
+      "other_users_shortfall_tj": -0.0
+    },
+    "2020": {
+      "allowance_tj_per_day_min": 588.0,
+      "allowance_tj_per_day_mean": 1022.2119938942448,
+      "days_other_demand_exceeds_supply": 0,
+      "other_users_shortfall_tj": -0.0
+    },
+    "2021": {
+      "allowance_tj_per_day_min": 588.0,
+      "allowance_tj_per_day_mean": 1064.1987733800502,
+      "days_other_demand_exceeds_supply": 0,
+      "other_users_shortfall_tj": -0.0
+    },
+    "2022": {
+      "allowance_tj_per_day_min": 588.0,
+      "allowance_tj_per_day_mean": 1045.7814906745316,
+      "days_other_demand_exceeds_supply": 0,
+      "other_users_shortfall_tj": -0.0
+    },
+    "2023": {
+      "allowance_tj_per_day_min": 588.0,
+      "allowance_tj_per_day_mean": 1047.2901720727157,
+      "days_other_demand_exceeds_supply": 0,
+      "other_users_shortfall_tj": -0.0
+    }
+  }
 }
