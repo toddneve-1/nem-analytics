@@ -33,8 +33,10 @@ def esoo_unserved_energy(workbook: Path) -> pd.DataFrame:
             for i, v in cells.items():
                 name = columns.get(i)
                 if name in ESOO_REGIONS:
-                    out.append({"assessment": assessment, "financial_year": first,
-                                "region": ESOO_REGIONS[name], "eue_pct": 100 * float(v)})  # fmt: off
+                    out.append({
+                        "assessment": assessment, "financial_year": first,
+                        "region": ESOO_REGIONS[name], "eue_pct": 100 * float(v),
+                    })  # fmt: off
         elif len(cells) == 1 and not first.startswith(("Unserved", "Data shows", "For ")):
             assessment, columns = first, None  # a new block starts with its title
     return pd.DataFrame(out)
